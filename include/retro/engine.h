@@ -6,7 +6,7 @@
 
 #define RETRO_ENTITY_CAPACITY 12
 #define RETRO_EVENT_CAPACITY 8
-#define RETRO_DRAW_CAPACITY 12
+#define RETRO_DRAW_CAPACITY 24
 #define RETRO_CELL_SIZE 8
 
 #define RETRO_LEFT 1
@@ -15,6 +15,7 @@
 #define RETRO_UP 8
 #define RETRO_PAUSE 16
 #define RETRO_RESTART 32
+#define RETRO_SKILL_WALL_JUMP 1
 
 #define RETRO_EMPTY 0
 #define RETRO_SOLID 1
@@ -36,6 +37,9 @@ typedef struct retro_input {
     retro_u16 released;
 } retro_input;
 
+struct retro_enemy_def;
+struct retro_path_point;
+
 typedef struct retro_room {
     const retro_u8 *collision;
     retro_u16 columns;
@@ -52,6 +56,12 @@ typedef struct retro_room {
     const retro_u16 *mechanism_targets;
     retro_u16 mechanism_target_count;
     const retro_mechanism_timing *mechanism_timings;
+    const struct retro_enemy_def *enemy_definitions;
+    retro_u16 enemy_count;
+    const struct retro_path_point *enemy_paths;
+    retro_u16 enemy_path_count;
+    retro_u8 max_health;
+    retro_u8 skills;
 } retro_room;
 
 typedef struct retro_entity {
@@ -67,6 +77,8 @@ typedef struct retro_entity {
     retro_u8 jump_buffer_ticks;
     retro_u8 animation_ticks;
     retro_u8 frame;
+    retro_u8 definition, state, target, inverse, arrived, fired;
+    retro_u16 timer, pause_ticks, random_seed;
 } retro_entity;
 
 typedef struct retro_event {
@@ -80,6 +92,7 @@ typedef struct retro_draw {
     retro_u8 frame;
     retro_u8 palette;
     retro_u8 flip_x;
+    retro_u8 kind;
 } retro_draw;
 
 /* backend capabilities are explicit; gameplay does not assume a 256px screen. */
@@ -95,6 +108,13 @@ typedef struct retro_frame {
     retro_i16 camera_x;
     retro_i16 camera_y;
 } retro_frame;
+
+#define RETRO_PROJECTILE_CAPACITY 16
+typedef struct retro_projectile {
+    retro_fixed x, y, velocity_x, velocity_y;
+    retro_u16 age, damage;
+    retro_u8 active, alignment, gravity;
+} retro_projectile;
 
 typedef struct retro_engine {
     const retro_room *room;
@@ -116,6 +136,8 @@ typedef struct retro_engine {
     retro_u16 checkpoint_id;
     retro_u8 content_error;
     retro_i16 camera_y;
+    retro_projectile projectiles[RETRO_PROJECTILE_CAPACITY];
+    retro_u16 deaths, projectiles_fired;
 } retro_engine;
 
 /* initializes caller-owned state; room and collision storage must outlive it. */

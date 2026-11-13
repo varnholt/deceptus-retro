@@ -17,7 +17,7 @@ def export_world(source, output, recipe):
     collision = [1 if first else 2 if second else 0 for first, second in zip(solid, one_way)]
     columns, rows = solid_image.width // recipe["collision_cell"], solid_image.height // recipe["collision_cell"]
     (output / "collision.bin").write_bytes(bytes(collision))
-    lines = ['#include "retro/engine.h"', '', 'static const retro_u8 room_collision[] = {']
+    lines = ['#include "retro/engine.h"', '#include "retro/enemies.h"', '', 'static const retro_u8 room_collision[] = {']
     lines += ['    ' + ','.join(map(str, collision[offset:offset + columns])) + ','
               for offset in range(0, len(collision), columns)]
     lines += ['};', '']
@@ -37,9 +37,19 @@ def export_world(source, output, recipe):
         lines += ['};', '']
     if targets:
         lines += ['static const retro_u16 room_targets[] = {' + ', '.join(map(str, targets)) + '};', '']
+    enemies = json.loads((source / 'enemies.json').read_text()) if (source / 'enemies.json').exists() else dict(definitions=[], paths=[])
+    if enemies['definitions']:
+        lines += ['static const retro_enemy_def room_enemies[] = {']
+        for enemy in enemies['definitions']:
+            values = [enemy[key] for key in ('source_id', 'x', 'y', 'path_first', 'path_count', 'time_offset', 'speed', 'acceleration', 'damage', 'period')]
+            lines += ['    {' + ', '.join(map(str, values)) + ', {' + ', '.join(map(str, enemy['delays'])) + '}, ' + enemy['kind'] + ', ' + str(enemy['alignment']) + ', {' + ', '.join(map(str, enemy['cycles'])) + '}, ' + str(enemy['animation_fps']) + ', ' + str(enemy['idle_ticks']) + '},']
+        lines += ['};', '']
+    if enemies['paths']:
+        lines += ['static const retro_path_point room_paths[] = {' + ', '.join('{' + ','.join(map(str, point)) + '}' for point in enemies['paths']) + '};', '']
     coordinates = recipe["spawn"] + recipe["patrol"] + recipe["door"]
     lines += ['const retro_room deceptus_room = {', f'    room_collision, {columns}, {rows}, ' + ', '.join(map(str, coordinates)) + ',',
-              f"    {'room_mechanisms' if definitions else '0'}, {len(definitions)}, {'room_targets' if targets else '0'}, {len(targets)}, {'room_timings' if definitions else '0'}",
+              f"    {'room_mechanisms' if definitions else '0'}, {len(definitions)}, {'room_targets' if targets else '0'}, {len(targets)}, {'room_timings' if definitions else '0'},",
+              f"    {'room_enemies' if enemies['definitions'] else '0'}, {len(enemies['definitions'])}, {'room_paths' if enemies['paths'] else '0'}, {len(enemies['paths'])}, {recipe.get('max_health', 0)}, {recipe.get('skills', 0)}",
               '};', '']
     (output / "room.c").write_text('\n'.join(lines))
     return len(collision)

@@ -14,4 +14,6 @@ void retro_move_horizontal_dynamic(const retro_room *room, retro_entity *entity,
 void retro_move_vertical_dynamic(const retro_room *room, retro_entity *entity, retro_u8 half_width, retro_u8 height,
                                  const retro_mechanism_set *mechanisms);
 
+retro_i16 retro_wall_side(const retro_room *room, const retro_entity *entity, const retro_mechanism_set *mechanisms);
+
 #endif

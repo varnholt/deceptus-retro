@@ -1,0 +1,30 @@
+DECEPTUS GBA PREVIEW - ROUTE HELP
+
+THE CELL
+Walk right. Rats do not damage the player. Press Up at the glowing door.
+
+CLOCKWORK ANTECHAMBER
+Walk through the grandfather clock to activate its checkpoint. Jump onto the
+small raised platform, then continue across the lower floor. Watch the falling
+arrows near the crates. An arrow takes 60 health; a lethal hit returns to the
+clock. Health is restored on death or a room restart.
+
+Jump up the crates on the right until you reach the tall wall/overhang.
+Do not keep jumping straight into the underside of the overhang. Step a little
+left, jump LEFT around its edge, then steer RIGHT back toward the wall.
+Release jump and press it again when touching the wall to wall-jump upward.
+Repeat to climb onto the upper ledge. Continue right and press Up at the exit.
+
+SPIKE GALLERY
+Press Up while beside the starting lever. Let the spike-retraction animation
+finish, walk right and jump up the raised step. Continue across the retracted
+spikes, then press Up near the right end. The exit requires the lever to be off.
+Select restores the lever and spikes to their initial states if needed.
+
+CRUMBLING BRIDGE
+Read the briefing before pressing Start. Walk right across the upper bridge
+without waiting on a segment for more than a second. Press Up on the safe
+platform at the far side to finish. If you fall, Select restarts this area.
+Collapsed segments eventually return when the player is clear.
+
+Start replays the preview after the completion screen.

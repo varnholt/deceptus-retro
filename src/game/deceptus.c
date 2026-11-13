@@ -1,3 +1,4 @@
+#include "retro/enemies.h"
 #include "retro/engine.h"
 #include "retro/physics.h"
 #include <string.h>
@@ -35,6 +36,37 @@ static void respawn(retro_engine *engine)
     player->jump_buffer_ticks = 0;
 }
 
+static void update_camera(retro_engine *engine)
+{
+    retro_i16 maximum_camera, target;
+    const retro_entity *player;
+    player = &engine->entities[0];
+    target = retro_floor(player->x) - engine->video.width / 2;
+    maximum_camera = engine->room->columns * RETRO_CELL_SIZE - engine->video.width;
+    if (maximum_camera < 0) {
+        maximum_camera = 0;
+    }
+    if (target < 0) {
+        target = 0;
+    }
+    if (target > maximum_camera) {
+        target = maximum_camera;
+    }
+    engine->camera_x = target;
+    target = retro_floor(player->y) - (retro_i16)(engine->video.height * 3 / 4);
+    maximum_camera = engine->room->rows * RETRO_CELL_SIZE - engine->video.height;
+    if (maximum_camera < 0) {
+        maximum_camera = 0;
+    }
+    if (target < 0) {
+        target = 0;
+    }
+    if (target > maximum_camera) {
+        target = maximum_camera;
+    }
+    engine->camera_y = target;
+}
+
 void retro_init(retro_engine *engine, const retro_room *room, const retro_video_caps *video)
 {
     retro_video_caps saved_video;
@@ -42,7 +74,7 @@ void retro_init(retro_engine *engine, const retro_room *room, const retro_video_
     memset(engine, 0, sizeof(*engine));
     engine->room = room;
     engine->video = saved_video;
-    engine->health = 3;
+    engine->health = room->max_health ? room->max_health : 3;
     engine->checkpoint_x = room->spawn_x;
     engine->checkpoint_y = room->spawn_y;
     engine->content_error = !retro_mechanisms_init(&engine->mechanisms, room->mechanisms, room->mechanism_count,
@@ -55,6 +87,8 @@ void retro_init(retro_engine *engine, const retro_room *room, const retro_video_
     if (room->door_x >= 0) {
         retro_spawn(engine, RETRO_DOOR, room->door_x, room->door_y);
     }
+    retro_enemies_init(engine);
+    update_camera(engine);
 }
 
 static retro_fixed approach(retro_fixed value, retro_fixed target, retro_i16 amount)
@@ -74,8 +108,12 @@ static void update_player(retro_engine *engine, const retro_input *input)
 {
     retro_entity *player;
     retro_fixed target;
-    retro_i16 direction;
+    retro_i16 direction, wall;
     player = &engine->entities[0];
+    wall = 0;
+    if (engine->room->skills & RETRO_SKILL_WALL_JUMP) {
+        wall = retro_wall_side(engine->room, player, &engine->mechanisms);
+    }
     direction = 0;
     if (input->held & RETRO_LEFT) {
         --direction;
@@ -106,11 +144,20 @@ static void update_player(retro_engine *engine, const retro_input *input)
         player->grounded = 0;
         event_push(engine, RETRO_EVENT_JUMP);
     }
+    if (player->jump_buffer_ticks && !player->grounded && !player->coyote_ticks && wall) {
+        player->velocity_y = -JUMP_SPEED;
+        player->velocity_x = -wall * MAX_SPEED;
+        player->jump_buffer_ticks = 0;
+        event_push(engine, RETRO_EVENT_JUMP);
+    }
     /* a released jump cuts ascent; buffered landings still get an initial jump. */
     if ((input->released & RETRO_JUMP) && player->velocity_y < -28) {
         player->velocity_y = -28;
     }
     player->velocity_y += GRAVITY;
+    if (wall && direction == wall && !player->grounded && player->velocity_y > 32) {
+        player->velocity_y = 32;
+    }
     if (player->velocity_y > MAX_FALL) {
         player->velocity_y = MAX_FALL;
     }
@@ -134,9 +181,12 @@ static void hurt(retro_engine *engine, retro_u16 damage)
     engine->hurt_ticks = 60;
     engine->health = damage >= engine->health ? 0 : (retro_u8)(engine->health - damage);
     if (!engine->health) {
-        engine->health = 3;
+        ++engine->deaths;
+        engine->health = engine->room->max_health ? engine->room->max_health : 3;
+        respawn(engine);
+    } else if (!engine->room->max_health) {
+        respawn(engine);
     }
-    respawn(engine);
     event_push(engine, RETRO_EVENT_HURT);
 }
 
@@ -193,7 +243,6 @@ static void update_actors(retro_engine *engine, const retro_input *input)
 void retro_tick(retro_engine *engine, retro_u16 buttons)
 {
     retro_input input;
-    retro_i16 maximum_camera, target;
     retro_u16 mechanism_index;
     retro_i16 mechanism_slot;
     retro_entity *player;
@@ -245,38 +294,16 @@ void retro_tick(retro_engine *engine, retro_u16 buttons)
             hurt(engine, mechanism_event->value);
         }
     }
+    hurt(engine, retro_enemies_tick(engine));
     update_actors(engine, &input);
     player = &engine->entities[0];
     if (retro_floor(player->y) > engine->room->rows * RETRO_CELL_SIZE + PLAYER_HEIGHT ||
         (retro_cell(engine->room, retro_position_cell(player->x), retro_position_cell(player->y - 1)) & RETRO_HAZARD)) {
         /* falling must recover even during the contact invulnerability interval. */
         engine->hurt_ticks = 0;
-        hurt(engine, 1);
+        hurt(engine, engine->room->max_health ? engine->health : 1);
     }
-    target = retro_floor(player->x) - engine->video.width / 2;
-    maximum_camera = engine->room->columns * RETRO_CELL_SIZE - engine->video.width;
-    if (maximum_camera < 0) {
-        maximum_camera = 0;
-    }
-    if (target < 0) {
-        target = 0;
-    }
-    if (target > maximum_camera) {
-        target = maximum_camera;
-    }
-    engine->camera_x = target;
-    target = retro_floor(player->y) - (retro_i16)(engine->video.height * 3 / 4);
-    maximum_camera = engine->room->rows * RETRO_CELL_SIZE - engine->video.height;
-    if (maximum_camera < 0) {
-        maximum_camera = 0;
-    }
-    if (target < 0) {
-        target = 0;
-    }
-    if (target > maximum_camera) {
-        target = maximum_camera;
-    }
-    engine->camera_y = target;
+    update_camera(engine);
 }
 
 void retro_render(const retro_engine *engine, retro_frame *frame)
@@ -290,7 +317,8 @@ void retro_render(const retro_engine *engine, retro_frame *frame)
     frame->camera_y = engine->camera_y;
     for (index = 0; index < RETRO_ENTITY_CAPACITY; ++index) {
         entity = &engine->entities[index];
-        if (!entity->active || (index == 0 && engine->hurt_ticks && ((engine->hurt_ticks / 4) & 1))) {
+        if (entity->kind >= RETRO_RAT || !entity->active ||
+            (index == 0 && engine->hurt_ticks && ((engine->hurt_ticks / 4) & 1))) {
             continue;
         }
         screen_x = retro_floor(entity->x) - engine->camera_x - 16;
@@ -307,5 +335,7 @@ void retro_render(const retro_engine *engine, retro_frame *frame)
         draw->frame = entity->kind == RETRO_DOOR ? 18 : entity->frame;
         draw->palette = entity->kind == RETRO_PATROL ? 1 : 0;
         draw->flip_x = entity->facing_left;
+        draw->kind = entity->kind;
     }
+    retro_enemies_render(engine, frame);
 }

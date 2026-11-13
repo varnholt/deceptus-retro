@@ -1,4 +1,5 @@
 #include "gba_assets.h"
+#include "retro/enemies.h"
 #include "retro/engine.h"
 
 #define REG16(address) (*(volatile retro_u16 *)(address))
@@ -19,19 +20,29 @@ typedef struct gba_object {
     retro_u16 affine;
 } gba_object;
 
+#if GBA_CAMPAIGN
+static retro_campaign campaign;
+#define engine campaign.engine
+static const gba_stage *active_stage;
+#else
 static retro_engine engine;
+#endif
 static retro_frame frame;
 static retro_video_caps video = {240, 160, RETRO_DRAW_CAPACITY};
 static gba_object objects[128] __attribute__((aligned(4)));
-static retro_u16 uploaded_frame[RETRO_DRAW_CAPACITY];
+static retro_u16 uploaded_frame[3];
+static const retro_draw *actor_draws[3];
+static retro_u16 actor_count;
 typedef struct gba_upload {
     retro_u16 resource;
     retro_u16 offset;
 } gba_upload;
 static gba_upload uploads[32];
 static retro_u16 upload_count, upload_bytes;
-volatile retro_u16 retro_debug[28];
+volatile retro_u16 retro_debug[34];
+#if !GBA_STREAMED_BACKGROUND
 static retro_u16 map_chunk = 65535;
+#endif
 
 static void dma_copy(const void *source, void *destination, retro_u32 bytes)
 {
@@ -39,6 +50,8 @@ static void dma_copy(const void *source, void *destination, retro_u32 bytes)
     REG_DMA_SOURCE = (retro_u32)source;
     REG_DMA_DESTINATION = (retro_u32)destination;
     REG_DMA_CONTROL = (1UL << 31) | (1UL << 26) | (bytes >> 2);
+    /* allow immediate DMA to start before a following transfer reconfigures it. */
+    __asm__ volatile("nop\n nop\n nop\n nop" ::: "memory");
 }
 
 static void wait_vblank(void)
@@ -82,7 +95,15 @@ static void video_init(void)
     dma_copy(gba_background0, (void *)0x06000000, GBA_BACKGROUND0_BYTES);
     dma_copy(gba_background1, (void *)0x06008000, GBA_BACKGROUND1_BYTES);
 
+#if GBA_CAMPAIGN
+    dma_copy(active_stage->palette, (void *)0x05000000, 512);
+    dma_copy(gba_font, (void *)0x0600c000, GBA_FONT_BYTES);
+    REG16(0x050001e2) = 0x7fff;
+    REG16(0x050001e6) = 0x0821;
+    REG16(0x0400000c) = (3 << 2) | (26 << 8);
+#else
     dma_copy(gba_background_palette, (void *)0x05000000, GBA_BACKGROUND_PALETTE_BYTES);
+#endif
     dma_copy(gba_actor_palette, (void *)0x05000200, GBA_ACTOR_PALETTE_BYTES);
     /* two 512x256 4bpp planes, with independent character blocks. */
     REG16(0x04000008) = 1 | (28 << 8) | (1 << 14);
@@ -93,7 +114,7 @@ static void video_init(void)
         objects[index].attribute2 = 0;
         objects[index].affine = 0;
     }
-    for (index = 0; index < RETRO_DRAW_CAPACITY; ++index) {
+    for (index = 0; index < 3; ++index) {
         uploaded_frame[index] = 65535;
     }
     dma_copy(objects, (void *)0x07000000, sizeof(objects));
@@ -101,8 +122,10 @@ static void video_init(void)
     REG16(0x04000012) = 0;
     REG16(0x04000014) = 0;
     REG16(0x04000016) = 0;
-    REG_DISPLAY = (1 << 6) | (1 << 8) | (1 << 9) | (1 << 12);
 }
+
+#include "background.h"
+#include "hud.h"
 
 static retro_u16 mechanism_resource(retro_u16 resource)
 {
@@ -120,12 +143,13 @@ static retro_u16 mechanism_resource(retro_u16 resource)
             return uploads[index].offset >> 5;
         }
         other = &table[uploads[index].resource];
-        if (other->palette_first == entry->palette_first) {
+        if (other->palette_first < entry->palette_first + entry->palette_count &&
+            entry->palette_first < other->palette_first + other->palette_count) {
             first = (const retro_u16 *)(gba_mechanism_palettes + entry->palette_offset);
             second = (const retro_u16 *)(gba_mechanism_palettes + other->palette_offset);
-            for (colour = 0; colour < entry->palette_count; ++colour) {
-                if (first[colour] != second[colour]) {
-                    /* distinct animated palettes need another hardware palette allocation. */
+            for (colour = entry->palette_first; colour < entry->palette_first + entry->palette_count; ++colour) {
+                if (colour >= other->palette_first && colour < other->palette_first + other->palette_count &&
+                    first[colour - entry->palette_first] != second[colour - other->palette_first]) {
                     engine.content_error = 2;
                     return 65535;
                 }
@@ -213,8 +237,51 @@ static void mechanism_objects(retro_u16 *count)
                 object = &objects[(*count)++];
                 object->attribute0 = ((retro_u16)y & 255) | (1 << 13);
                 object->attribute1 = ((retro_u16)x & 511) | (1 << 14);
-                object->attribute2 = tile + piece * 8;
+                object->attribute2 = tile + piece * 8 + (GBA_CAMPAIGN ? 1 << 10 : 0);
             }
+        }
+    }
+}
+
+static void enemy_objects(retro_u16 *count, const retro_draw *draw)
+{
+    retro_u16 resource, tile, row, column, piece;
+    retro_i16 x, y;
+    const gba_mechanism_resource *entry;
+    gba_object *object;
+    if (draw->kind == RETRO_RAT) {
+        resource = GBA_RAT_FIRST + draw->frame;
+    } else if (draw->kind == RETRO_ARROW_TRAP) {
+        resource = GBA_TRAP_FIRST + draw->frame;
+    } else if (draw->kind == RETRO_ARROW_MUZZLE) {
+        resource = GBA_MUZZLE_FIRST + draw->frame;
+    } else if (draw->kind == RETRO_ARROW) {
+        resource = GBA_ARROW_FIRST + draw->frame;
+    } else {
+        engine.content_error = 6;
+        return;
+    }
+    tile = mechanism_resource(resource);
+    if (tile == 65535) {
+        return;
+    }
+    entry = &((const gba_mechanism_resource *)gba_mechanism_table)[resource];
+    piece = 0;
+    for (row = 0; row < entry->rows; ++row) {
+        for (column = 0; column < entry->columns; ++column, ++piece) {
+            x = draw->x + column * 16;
+            y = draw->y + row * 16;
+            if (x <= -16 || x >= 240 || y <= -16 || y >= 160) {
+                continue;
+            }
+            if (*count >= 128) {
+                engine.content_error = 4;
+                return;
+            }
+            object = &objects[(*count)++];
+            object->attribute0 = ((retro_u16)y & 255) | (1 << 13);
+            object->attribute1 = ((retro_u16)x & 511) | (1 << 14);
+            object->attribute2 = tile + piece * 8 + (GBA_CAMPAIGN ? 1 << 10 : 0);
         }
     }
 }
@@ -230,9 +297,24 @@ static void video_prepare(void)
     }
     count = 0;
     upload_count = 0;
-    upload_bytes = frame.count * GBA_ACTOR_FRAME_BYTES;
+    upload_bytes = 3 * GBA_ACTOR_FRAME_BYTES;
+    actor_count = 0;
+#if GBA_CAMPAIGN
+    if (campaign.mode != RETRO_CAMPAIGN_PLAYING) {
+        return;
+    }
+#endif
     for (index = 0; index < frame.count; ++index) {
         draw = &frame.draws[index];
+        if (draw->kind >= RETRO_RAT) {
+            enemy_objects(&count, draw);
+            continue;
+        }
+        if (actor_count >= 3) {
+            engine.content_error = 4;
+            break;
+        }
+        actor_draws[actor_count] = draw;
         if (draw->frame >= GBA_ACTOR_FRAME_COUNT || draw->palette > 1) {
             engine.content_error = 1;
             continue;
@@ -246,14 +328,18 @@ static void video_prepare(void)
             object = &objects[count++];
             object->attribute0 = ((retro_u16)y & 255) | (1 << 13);
             object->attribute1 = ((retro_u16)x & 511) | (1 << 14) | (draw->flip_x ? 1 << 12 : 0);
-            object->attribute2 = index * 48 + piece * 8;
+            object->attribute2 = actor_count * 48 + piece * 8 + (GBA_CAMPAIGN ? 1 << 10 : 0);
         }
+        ++actor_count;
     }
     mechanism_objects(&count);
 }
 
 static void maps_commit(void)
 {
+#if GBA_STREAMED_BACKGROUND
+    background_commit();
+#else
     retro_u16 chunk, next, chunks;
     chunk = frame.camera_x >> 8;
     if (chunk == map_chunk) {
@@ -270,14 +356,15 @@ static void maps_commit(void)
     dma_copy(gba_map0 + next * 2048, (void *)(0x0600e000 + ((chunk + 1) & 1) * 2048), 2048);
     dma_copy(gba_map1 + next * 2048, (void *)(0x0600f000 + ((chunk + 1) & 1) * 2048), 2048);
     map_chunk = chunk;
+#endif
 }
 
 static void video_commit(void)
 {
     retro_u16 index, resource;
     const retro_draw *draw;
-    for (index = 0; index < frame.count; ++index) {
-        draw = &frame.draws[index];
+    for (index = 0; index < actor_count; ++index) {
+        draw = actor_draws[index];
         if (draw->frame >= GBA_ACTOR_FRAME_COUNT || draw->palette > 1) {
             continue;
         }
@@ -288,7 +375,7 @@ static void video_commit(void)
             uploaded_frame[index] = resource;
         }
     }
-    for (index = frame.count; index < RETRO_DRAW_CAPACITY; ++index) {
+    for (index = frame.count; index < 3; ++index) {
         uploaded_frame[index] = 65535;
     }
     for (index = 0; index < upload_count; ++index) {
@@ -299,13 +386,20 @@ static void video_commit(void)
                  entry->palette_count * 2);
     }
     maps_commit();
+    hud_commit();
     dma_copy(objects, (void *)0x07000000, sizeof(objects));
     REG16(0x04000010) = frame.camera_x & 511;
     REG16(0x04000012) = frame.camera_y;
     REG16(0x04000014) = frame.camera_x & 511;
     REG16(0x04000016) = frame.camera_y;
+#if GBA_CAMPAIGN
+    REG16(0x04000050) = (engine.paused || campaign.mode != RETRO_CAMPAIGN_PLAYING) ? (3 << 6) | 0x13 : 0;
+    REG16(0x04000054) = (engine.paused || campaign.mode != RETRO_CAMPAIGN_PLAYING) ? 8 : 0;
+#else
     REG16(0x04000050) = engine.paused ? (3 << 6) | 0x13 : 0;
     REG16(0x04000054) = engine.paused ? 8 : 0;
+#endif
+    REG_DISPLAY = (1 << 6) | (1 << 8) | (1 << 9) | (1 << 12) | (GBA_CAMPAIGN ? 1 << 10 : 0);
 }
 
 static void debug_write(void)
@@ -359,16 +453,41 @@ static void debug_write(void)
         retro_debug[21] = engine.mechanisms.overflow;
         retro_debug[22] = engine.hurt_ticks;
     }
+    retro_debug[30] = engine.deaths;
+    retro_debug[32] = engine.projectiles_fired;
+#if GBA_CAMPAIGN
+    retro_debug[28] = campaign.room_index;
+    retro_debug[29] = campaign.mode;
+    retro_debug[30] = campaign.deaths;
+    retro_debug[31] = campaign.seconds;
+    retro_debug[33] = campaign.restarts;
+#endif
 }
 
-int main(void)
+int __attribute__((section(".iwram"))) main(void)
 {
+#if GBA_CAMPAIGN
+    retro_campaign_init(&campaign, &gba_campaign_definition, &video);
+    active_stage = &gba_stages[0];
+#else
     retro_init(&engine, &deceptus_room, &video);
+#endif
     video_init();
+    background_reset();
     while (1) {
+#if GBA_CAMPAIGN
+        if (retro_campaign_tick(&campaign, input_read())) {
+            active_stage = &gba_stages[campaign.room_index];
+            video_init();
+            background_reset();
+        }
+#else
         retro_tick(&engine, input_read());
+#endif
         retro_render(&engine, &frame);
+        background_prepare();
         video_prepare();
+        hud_prepare();
 
         debug_write();
         wait_vblank();

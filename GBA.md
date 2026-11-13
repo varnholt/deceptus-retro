@@ -1,145 +1,127 @@
 # GBA backend
 
-GBA is the first complete-game target. The current ROM runs the existing
-mechanism scene through the shared C engine. Room streaming, original enemy
-types, full level scripts, progression and audio remain in the full-game work
-listed in `PORTING.md`.
+The default build is a short, four-area playable preview. It has a title,
+briefings, original rat and arrow-trap placements, checkpoints, wall jumps,
+linked spike traps, collapsing platforms, room transitions, and finish/replay.
+It is not the complete original game. Full progression, narrative, combat,
+audio and persistent saves remain in `PORTING.md`.
 
-## Build and play
+## Build, verify and package
 
-Install the Python requirements and LLVM with `clang`, `ld.lld` and
-`llvm-objcopy` available on PATH:
+Install the Python requirements and LLVM (`clang`, `ld.lld`, `llvm-objcopy`):
 
 ```powershell
-python -m pip install -r requirements.txt
 python tools/bootstrap.py --target gba --emulator
 python tools/build_gba.py
 python tools/gba_emulator.py
 python tools/play.py
+python tools/package_preview.py --build
 ```
 
-The current workspace already has these tools and a built
-`build/gba/deceptus.gba`. `build/gba/deceptus.elf` retains symbols for debugging.
-The ROM is padded to at least 512KiB with a valid header, checksum and ARM
-entry point. It is currently 1MiB with the animation library. The size can grow
-automatically up to the 32MiB cartridge address limit.
+`--scene tonight` is the default. The self-contained cartridge is
+`build/gba/deceptus-tonight.gba`; the latest build is also `deceptus.gba`.
+The package script runs native tests and the real-ROM playthrough, checks the
+packaged ROM hash, and creates a dated ZIP under `build/release/`. No emulator,
+BIOS, development tools or source artwork folders are bundled.
 
-Use `--data PATH` for a different main-engine checkout. `--clang`, `--linker`
-and `--objcopy` accept executable paths. After configuring the native CMake
-build, `cmake --build build/host --target gba_rom` is an alternative entry point.
-The GBA build does not require PVSnesLib or the SNES compiler.
+The preview is currently 2MiB. The builder pads to at least 512KiB, fixes the
+header/checksum and retains ELF symbols. The current mGBA core misidentifies
+256KiB images as multiboot; the minimum padding avoids that path. ROMs can grow
+up to the 32MiB cartridge limit.
 
-The backend was tested with LLVM 18.1.8 on Windows x64 and mGBA
-`0.11-212-7a12d6d`. The scripts use platform-independent paths but other host
-platforms have not been exercised here; pass a native libretro core with
-`--core PATH`. The small desktop player shows video without audio output.
+`--data PATH` selects another authoritative engine checkout. Tool executable
+paths can be supplied with `--clang`, `--linker` and `--objcopy`. The CMake
+`gba_rom` target invokes the same default build. PVSnesLib is not needed.
 
-Bootstrap keeps the unchanged public devkitPro `gbafix.c` reference in
-`.tools/gbafix-reference.c`. Its mandatory logo/header data is used when preparing
-the ROM header. The reference file keeps its upstream license notice. mGBA is
-also downloaded into `.tools/`, preserving its own terms. Download URLs and
-hashes are recorded locally. Neither third-party source/binary nor generated
-game artwork is committed to this repository.
-
-## Original content and graphics
-
-`tools/gba_assets.py` invokes the shared lossless import directly on
-`../deceptus_engine/data`. It never reads the SNES-converted image. Original
-pixel positions and sprite dimensions stay at 1:1; no dithering is enabled.
-
-- Backgrounds use 16 palettes of 15 opaque colours, selected per 8x8 tile.
-- The current 768x224 background uses 1,621 unique 4bpp patterns. Its measured
-  palette error is recorded in `budget.json`; about 96.7% of pixels retain their
-  exact source RGB555 colour.
-- The player keeps all 48 opaque RGB555 source colours. Mechanism frames use
-  separate palette ranges, uploaded with their graphics. No mechanism colour
-  reduction or sprite resampling is performed.
-- The generated ROM library contains 257 original frames: 33 lever, 40 spike,
-  32 on/off block and 152 collapsing-platform frames. Only visible resources
-  are uploaded; repeated instances share their current frame in OBJ VRAM.
-- Visible actor slots are followed by mechanism resources in the 32KiB OBJ
-  area. Bounds checks reject excess graphics or OAM objects. Incompatible
-  simultaneous animated palettes within one family fail explicitly; general
-  per-instance palette allocation remains work for larger scenes.
-
-Generated output stays in `assets/generated/gba/`, separate from SNES output.
-`tools/world_export.py` supplies both targets with the same collision and
-mechanism definitions. GBA uses `assets/rooms/gba-lever.json` or `gba-platforms.json` and imports into
-`assets/source/gba/`; SNES retains its clock-room recipe.
-
-## Hardware layout
-
-| Region | Use |
-| --- | --- |
-| BG VRAM `0x06000000` | First 1,024 4bpp patterns in character block 0 |
-| BG VRAM `0x06008000` | Overflow patterns in character block 2 |
-| BG VRAM `0x0600e000` | Primary 64x32 map in screen blocks 28–29 |
-| BG VRAM `0x0600f000` | Overflow 64x32 map in screen blocks 30–31 |
-| OBJ VRAM `0x06010000` | Visible actor frames, then deduplicated mechanism resources; 32KiB total |
-| Palette RAM `0x05000000` | 256 background entries |
-| Palette RAM `0x05000200` | Original actor and mechanism colours |
-
-The display uses mode 0, two background planes and 1D object mapping. Graphics
-and OAM updates happen during VBlank through DMA3. Startup code sets system/IRQ
-stacks and initializes data/BSS. Platform-local memory routines satisfy the
-freestanding ARM ABI; no host C library, heap or floating point is used by the
-runtime. Linker assertions check ROM and EWRAM limits.
-
-The shared camera now follows both axes. GBA's 240x160 viewport is a view onto
-the same source coordinates: it does not shrink the artwork to fit. The SNES
-prototype retains its 256x224 view and its existing appearance.
-
-## Verified scope and limits
-
-The default scene imports original lever `lever_spike_06` (object 113) and its
-12 named spike-block targets from the catacombs map. Start beside the lever.
-Press **Up** to retract or extend the traps. Walk right, then jump onto the
-raised floor; the same route is safe with traps retracted and lethal with them
-extended. **R** restores the source states. Holding Up toggles only once.
-
-The original links drive C mechanism states directly; this chain does not need
-Lua. The full level Lua event dispatch is still not connected. Lever travel and
-idle frames, the one-second interaction cooldown, 40fps trap animation, and the
-deadly frame range are implemented in portable C. Rapid switch requests use a
-bounded eight-entry queue; overflowing requests fail without a partial lever
-chain or Lua callback write.
-
-A second original area demonstrates collapsing platforms:
+Standalone development scenes remain available:
 
 ```powershell
+python tools/build_gba.py --scene lever
+python tools/gba_emulator.py --scene lever
 python tools/build_gba.py --scene platforms
 python tools/gba_emulator.py --scene platforms
 python tools/play.py --rom build/gba/deceptus-platforms.gba
 ```
 
-Stand on a platform for just over one second: it shakes, crumbles and stops
-supporting the player. It returns after the original respawn and fade delay,
-provided the player is clear. Restart restores source states. Both scene ROMs
-are retained as `deceptus-lever.gba` and `deceptus-platforms.gba`; the last build
-also becomes `deceptus.gba`. Build `--scene lever` to restore the default scene.
+`--scene cell` and `--scene preview` build the individual enemy/whole-room areas.
+The SNES prototype remains separate and retains its clock/patrol/portal scene.
 
-Collapse contact/touched rules, collision and timers are ported. Visual shake
-is deterministic, segment destruction uses the base 30fps/6px-per-second speeds,
-and the source's random per-segment multipliers are not reproduced. Returning
-platforms remain hidden during the fade delay; gradual alpha fade is unfinished.
-Custom destruction/fall speeds are rejected during import.
+## Source content
 
-The background is paged in 256px screen blocks as the camera moves across this
-768px area; it does not load neighbouring rooms. The mGBA route verifies source
-links, all 13 enabled states, input edges, lethal versus safe traversal,
-restart/pause, and background pixels before and after a page boundary.
-Reports and screenshots are in `artifacts/gba-*`.
+`assets/campaigns/tonight.json` describes the curated route and goals. Its four
+recipes point into the original catacombs map: the cell (720x408), the clockwork
+antechamber (1224x480), the spike gallery crop (768x224), and the crumbling-bridge
+crop (768x224). These are preview links, not the original full-game room graph.
 
-Native tests reconstruct the complete GBA background from packed tiles, flips,
-palette attributes and both maps. They also decode all 19 actor frames and
-compare their opaque RGB555 pixels against the lossless import. All 257
-mechanism frames are decoded and checked against their source atlas pixels;
-the ROM check also compares an actual middle lever frame and its palette. Shared engine
-and source-Lua differential tests still run. The SNES ROM route passes after the
-camera/exporter changes.
+All artwork stays at 1:1. Import reads original Tiled layers, collision vectors,
+player animation definitions, sprites, Lua constants, and the original 3x5 font.
+Generated imports and target resources are ignored. No maintained artwork copy
+is introduced. SNES conversion is never an input to GBA conversion.
 
-There is no hardware test result yet. Audio, save storage and interrupts are not
-implemented; the current display loop polls VBlank. This backend establishes a
-working GBA platform, not a completed port or a performance guarantee for the
-full original game. `python tools/build_gba.py --full-game` fails explicitly
-while content coverage is incomplete.
+Rat paths use the same tile-to-pixel conversion as the original `TmxEnemy`.
+Rat speed, acceleration, cycle lengths and idle delay are extracted from Lua.
+Arrow delay/period settings come from the original initializer; the C projectile
+service implements the bow launch multiplier. Unsupported enemies and paths
+outside the loaded area remain explicit in the content report. The clockwork
+room's blob and its rat's cross-room patrol are not included in this preview.
+
+The rat port uses deterministic random choices and arrival waits. Physics uses
+8px collision cells rather than Box2D circles/joints. Wall jumping is enabled
+for the clockwork traversal; its tuning approximates the original movement.
+Arrow collision uses sub-cell point steps and cardinal sprite rotations.
+These are bounded native components, not a general Lua translator.
+
+## Background and object streaming
+
+Each campaign area fits 15 background palette banks; bank 15 is reserved for
+readable UI. Colours are selected per 8x8 tile with no dithering or resampling.
+Exact source RGB555 pixel coverage is about 92.7%, 94.6%, 96.2% and 99.5% for
+the four areas. Detailed palette metrics stay in each area's `budget.json`.
+
+Room pattern libraries live in ROM. A visible-tile cache maps global pattern ids
+to 1,534 usable VRAM slots and updates a wrapping 64x32 map on both axes. The
+clockwork room has 3,366 unique patterns, so it is not preloaded into VRAM.
+Room loads clear cache mappings before switching the palette and source tables.
+
+Actor and mechanism sprites use 8bpp OBJ graphics with disjoint palette ranges
+where required by the loaded scene. All opaque source RGB555 sprite colours are
+preserved. The shared ROM library contains 387 source frames: lever, spike,
+on/off block, collapsing-platform, rat, trap-body/muzzle and rotated arrow
+frames. Visible resources share uploads by id, within 32KiB OBJ VRAM and 128 OAM
+entries. Incompatible overlapping animated palettes or excess resources fail
+explicitly; general palette allocation for arbitrary scenes remains unfinished.
+
+| Region | Use |
+| --- | --- |
+| `0x06000000` | Primary 4bpp pattern slots |
+| `0x06008000` | Secondary pattern slots; campaign slots stop before `0x0600c000` |
+| `0x0600c000` | Source-font UI glyphs |
+| `0x0600d000` | UI map |
+| `0x0600e000` | Primary 64x32 map |
+| `0x0600f000` | Secondary 64x32 map |
+| `0x06010000` | Actor slots followed by cached mechanism/enemy resources |
+
+The backend uses mode 0 and DMA3 during VBlank, with explicit DMA-start delay.
+Hot renderer and simulation code is copied into IWRAM; renderer code uses ARM
+instructions and portable engine code uses Thumb. Linker limits protect ROM,
+EWRAM and the 28KiB code region below the reserved IWRAM stacks. The runtime has
+no heap, floating point, host C library, interrupts, audio or save backend.
+
+## Verification and limits
+
+`tools/verify_preview.py` plays from title through all exits, wall jumps, lever
+links and finish/replay without altering emulator memory. It also checks pause,
+restart, briefings, spike death, collapsing collision, arrow damage, checkpoint
+recovery, streaming pixels in each area and 1,274 display frames of simulation
+at one tick per display frame. The ZIP includes its ROM-hash-matched report.
+
+Native tests reconstruct full backgrounds, decode all 387 source sprite frames,
+exercise campaign transitions and mechanism queues, and compare C arrow firing
+against execution of the actual Lua script when the original Lua sources are
+available. Existing SNES and standalone GBA ROM routes still run.
+
+Tested with LLVM 18.1.8 and mGBA `0.11-212-7a12d6d` on Windows. No physical-console
+result is claimed. Collapse visuals use deterministic shake/base destruction
+speeds and remain hidden during the return fade delay. Full original-physics
+fidelity, arbitrary room graphs, other enemy types, complete Lua event dispatch,
+progression, combat, audio and saves are outside the verified preview scope.

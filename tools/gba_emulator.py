@@ -121,11 +121,11 @@ def verify_platforms(core, rom):
         emulator.run(20)
         initial, platform = debug()
         assert initial['grounded'] and initial['y'] == 72 and platform['solid'] == 1
-        assert platform['timer'] == 19
+        assert platform['timer'] == initial['ticks'] and platform['timer'] < 60
         emulator.screenshot(ROOT / 'artifacts/gba-platform-standing.png')
         emulator.run(39)
-        assert debug()[1] == dict(phase=0, solid=1, timer=58)
-        emulator.run(6)
+        assert debug()[1] == dict(phase=0, solid=1, timer=initial['ticks'] + 39)
+        emulator.run(65 - debug()[0]['ticks'])
         falling, collapsed = debug()
         assert not falling['grounded'] and falling['y'] > 72 and collapsed['phase'] == 1 and not collapsed['solid']
         emulator.run(20)
@@ -153,6 +153,24 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--core', type=Path, default=ROOT / '.tools/mgba/mgba_libretro.dll')
     parser.add_argument('--rom', type=Path, default=ROOT / 'build/gba/deceptus.gba')
-    parser.add_argument("--scene", choices=["lever", "platforms"], default="lever")
+    parser.add_argument("--scene", choices=["auto", "lever", "platforms", "tonight"], default="auto")
     args = parser.parse_args()
-    (verify if args.scene == "lever" else verify_platforms)(args.core, args.rom)
+    scene = args.scene
+    if scene == 'auto':
+        if args.rom.stem.endswith('-platforms'):
+            scene = 'platforms'
+        elif args.rom.stem.endswith('-lever'):
+            scene = 'lever'
+        elif args.rom.stem.endswith('-tonight'):
+            scene = 'tonight'
+        else:
+            scene = json.loads((ROOT / 'build/gba/build.json').read_text()).get('scene', 'lever')
+    if scene == 'tonight':
+        from verify_preview import verify as verify_campaign
+        verify_campaign(args.core, args.rom)
+    elif scene == 'platforms':
+        verify_platforms(args.core, args.rom)
+    elif scene == 'lever':
+        verify(args.core, args.rom)
+    else:
+        raise SystemExit('no automated route for this standalone development scene')

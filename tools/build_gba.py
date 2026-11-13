@@ -41,7 +41,7 @@ def fix_header(rom, reference):
     rom.write_bytes(payload)
 
 
-def build(data, clang='clang', linker='ld.lld', objcopy='llvm-objcopy', full_game=False, scene='lever'):
+def build(data, clang='clang', linker='ld.lld', objcopy='llvm-objcopy', full_game=False, scene='tonight'):
     for executable in (clang, linker, objcopy):
         if not shutil.which(str(executable)):
             raise SystemExit(f'{executable} not found; install LLVM or supply its executable path')
@@ -55,19 +55,23 @@ def build(data, clang='clang', linker='ld.lld', objcopy='llvm-objcopy', full_gam
             raise SystemExit('Full-game content support is incomplete; see build/content/summary.json')
     folder = ROOT / 'build/gba'
     folder.mkdir(parents=True, exist_ok=True)
-    run([sys.executable, ROOT / 'tools/gba_assets.py', '--data', data, '--scene', scene], ROOT)
+    if scene == 'tonight':
+        run([sys.executable, ROOT / 'tools/campaign_assets.py', '--data', data], ROOT)
+    else:
+        run([sys.executable, ROOT / 'tools/gba_assets.py', '--data', data, '--scene', scene], ROOT)
     platform = ROOT / 'src/platform/gba'
     flags = ['--target=arm-none-eabi', '-mcpu=arm7tdmi', '-mthumb', '-O2', '-ffreestanding', '-fno-builtin',
              '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-ffunction-sections', '-fdata-sections',
              '-std=c90', '-Wall', '-Wextra', '-Werror', '-I' + str(ROOT / 'include'),
              '-I' + str(ROOT / 'assets/generated/gba'), '-I' + str(platform / 'freestanding')]
     sources = [ROOT / 'src/engine/world.c', ROOT / 'src/engine/entities.c', ROOT / 'src/engine/mechanisms.c',
-               ROOT / 'src/engine/logic.c', ROOT / 'src/game/deceptus.c', platform / 'main.c',
+               ROOT / 'src/engine/logic.c', ROOT / 'src/engine/enemies.c', ROOT / 'src/game/deceptus.c', ROOT / 'src/game/campaign.c', platform / 'main.c',
                platform / 'runtime.c', ROOT / 'assets/generated/gba/room.c']
     objects = []
     for source in sources:
         target = folder / (source.stem + '.o')
-        run([clang, *flags, '-c', source, '-o', target], folder)
+        extra = ['-marm'] if source == platform / 'main.c' else []
+        run([clang, *flags, *extra, '-c', source, '-o', target], folder)
         objects.append(target)
     for name, source in [('start', platform / 'start.s'), ('data', ROOT / 'assets/generated/gba/data.s')]:
         target = folder / (name + '.o')
@@ -94,6 +98,6 @@ if __name__ == '__main__':
     parser.add_argument('--linker', default='ld.lld')
     parser.add_argument('--objcopy', default='llvm-objcopy')
     parser.add_argument('--full-game', action='store_true')
-    parser.add_argument("--scene", choices=["lever", "platforms"], default="lever")
+    parser.add_argument("--scene", choices=["lever", "platforms", "preview", "cell", "tonight"], default="tonight")
     args = parser.parse_args()
     build(args.data.resolve(), args.clang, args.linker, args.objcopy, args.full_game, args.scene)

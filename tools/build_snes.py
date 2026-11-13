@@ -39,7 +39,7 @@ def build(sdk, data, full_game=False):
     (folder / "hdr.asm").write_text(header)
     objects = []
     sources = [ROOT / "src/engine/world.c", ROOT / "src/engine/entities.c", ROOT / "src/engine/mechanisms.c",
-               ROOT / "src/engine/logic.c", ROOT / "src/game/deceptus.c",
+               ROOT / "src/engine/logic.c", ROOT / "src/engine/enemies.c", ROOT / "src/game/deceptus.c",
                ROOT / "src/platform/snes/main.c", ROOT / "assets/generated/room.c"]
     for source in sources:
         stem = source.stem

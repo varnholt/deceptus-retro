@@ -1,0 +1,49 @@
+{
+  "map": "level-catacombs/catacombs.tmx",
+  "crop_pixels": [
+    816,
+    2352,
+    720,
+    408
+  ],
+  "visual_layers": [
+    "bg0",
+    "bg1",
+    "bg2",
+    "bg3",
+    "bg4",
+    "bg5",
+    "level-0dec",
+    "level-0",
+    "decoration-b",
+    "level",
+    "level-2",
+    "level-3",
+    "decoration-f1"
+  ],
+  "collision_layers": [
+    "level",
+    "box_colliders"
+  ],
+  "one_way_layers": [
+    "level_solid_onesided"
+  ],
+  "collision_cell": 8,
+  "coverage_threshold": 0.5,
+  "spawn": [
+    264,
+    312
+  ],
+  "patrol": [
+    -100,
+    240
+  ],
+  "door": [
+    -100,
+    240
+  ],
+  "stream_background": true,
+  "title": "THE CELL",
+  "import_enemies": true,
+  "max_health": 100
+}

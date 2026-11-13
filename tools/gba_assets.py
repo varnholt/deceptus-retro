@@ -64,6 +64,37 @@ def compile_background(image, output):
     return len(patterns), metrics
 
 
+def compile_streamed_background(image, output):
+    if image.width % 8 or image.height % 8 or image.width > 2040 or image.height > 2040:
+        raise ValueError('streamed room dimensions must be multiples of 8 below 2048px')
+    converted, banks, metrics = banked_background(image, bank_count=15)
+    converted.save(output / 'room-preview.png')
+    patterns, lookup, cells = [bytes(32)], {bytes(32): 0}, []
+    for top in range(0, image.height, 8):
+        for left in range(0, image.width, 8):
+            tile = converted.crop((left, top, left + 8, top + 8))
+            packed = linear4(tile)
+            if packed not in lookup:
+                index = len(patterns)
+                patterns.append(packed)
+                lookup[packed] = index
+                lookup.setdefault(linear4(tile.transpose(Image.Transpose.FLIP_LEFT_RIGHT)), index | 0x4000)
+                lookup.setdefault(linear4(tile.transpose(Image.Transpose.FLIP_TOP_BOTTOM)), index | 0x8000)
+                lookup.setdefault(linear4(tile.transpose(Image.Transpose.ROTATE_180)), index | 0xC000)
+            entry = lookup[packed]
+            bank = banks[(top // 8) * (image.width // 8) + left // 8]
+            cells.extend((entry & 0x3fff, (bank << 12) | ((entry & 0xc000) >> 4)))
+    if len(patterns) > 8192:
+        raise ValueError('room exceeds the 8192-pattern streaming lookup budget')
+    (output / 'stream-patterns.bin').write_bytes(b''.join(patterns))
+    (output / 'stream-cells.bin').write_bytes(struct.pack(f'<{len(cells)}H', *cells))
+    (output / 'background.pal').write_bytes(palette_rgb555(converted, 16))
+    # legacy resources stay valid for the common backend declarations.
+    for filename, size in [('background0.bin', 32), ('background1.bin', 32), ('map0.bin', 4096), ('map1.bin', 4096)]:
+        (output / filename).write_bytes(bytes(size))
+    return len(patterns), metrics
+
+
 def compile_actors(image, output):
     rgba = np.asarray(image.convert('RGBA'), dtype=np.uint8)
     opaque = rgba[:, :, 3] >= 128
@@ -104,17 +135,47 @@ def compile_mechanisms(data, output):
     specifications = [('levers.png', 72, 72, 11, 33, 52, 136, False),
                       ('enemy_spikeblock.png', 24, 24, 8, 40, 188, 12, False),
                       ('on_off_block.png', 24, 24, 8, 32, 200, 12, True),
-                      ('collapsing_platform.png', 24, 72, 38, 152, 212, 44, True)]
+                      ('collapsing_platform.png', 24, 72, 38, 152, 212, 44, True),
+                      ('rat.png', 24, 24, 7, 70, 200, 12, True),
+                      ('trap-body', 72, 72, 8, 4, 52, 24, True),
+                      ('trap-muzzles', 24, 24, 8, 40, 52, 24, True),
+                      ('../weapons/arrow.png', 24, 24, 15, 16, 80, 16, True)]
     for filename, width, height, columns, count, palette_first, palette_count, shared in specifications:
-        atlas = Image.open(data / 'sprites' / filename).convert('RGBA')
-        images = [atlas.crop(((index % columns) * width, (index // columns) * height,
-                              (index % columns + 1) * width, (index // columns + 1) * height)) for index in range(count)]
+        actual_filename = 'enemy_arrowtrap_2.png' if filename.startswith('trap-') else filename
+        atlas = Image.open(data / 'sprites' / actual_filename).convert('RGBA')
+        rects, rotations = [], []
+        for index in range(count):
+            rotation = None
+            if filename == 'trap-body':
+                x, y = [(0, 0), (0, 72), (360, 0), (360, 72)][index]
+                rect = [x, y, 72, 72]
+            elif filename == 'trap-muzzles':
+                direction, step = index // 10, index % 10
+                rect = [step * 24, (6 + direction) * 24, 24 if direction < 2 else 8, 8 if direction < 2 else 24]
+            elif filename == '../weapons/arrow.png':
+                rect = [(index % 4) * 24, 24, 24, 24]
+                rotation = [180, 0, 270, 90][index // 4]
+            else:
+                rect = [(index % columns) * width, (index // columns) * height, width, height]
+            rects.append(rect)
+            rotations.append(rotation)
+        images = []
+        for rect, rotation in zip(rects, rotations):
+            x, y, w, h = rect
+            image = atlas.crop((x, y, x + w, y + h))
+            if rotation:
+                image = image.transpose({90: Image.Transpose.ROTATE_90, 180: Image.Transpose.ROTATE_180, 270: Image.Transpose.ROTATE_270}[rotation])
+            images.append(image)
         common = set()
         if shared:
             for image in images:
                 pixels = np.asarray(image)
                 common.update(map(tuple, (pixels[:, :, :3][pixels[:, :, 3] >= 128] >> 3).tolist()))
+        if actual_filename == 'enemy_arrowtrap_2.png':
+            pixels = np.asarray(atlas)
+            common = set(map(tuple, (pixels[:, :, :3][pixels[:, :, 3] >= 128] >> 3).tolist()))
         for index, image in enumerate(images):
+            width, height = image.size
             padded = Image.new('RGBA', (((width + 15) // 16) * 16, ((height + 15) // 16) * 16))
             padded.alpha_composite(image)
             pixels = np.asarray(padded)
@@ -132,8 +193,7 @@ def compile_mechanisms(data, output):
             palette += [0] * (palette_count - len(palette))
             descriptors.extend(struct.pack('<IIH4B2x', len(graphics), len(palettes), len(packed),
                                            padded.width // 16, padded.height // 16, palette_first, palette_count))
-            manifest.append(dict(source=filename, frame=index, source_rect=[(index % columns) * width,
-                                 (index // columns) * height, width, height], size=list(padded.size),
+            manifest.append(dict(source=actual_filename, frame=index, source_rect=rects[index], rotation=rotations[index], size=list(padded.size),
                                  offset=len(graphics), palette_offset=len(palettes), bytes=len(packed),
                                  palette_first=palette_first, palette_count=palette_count))
             graphics.extend(packed)
@@ -145,14 +205,15 @@ def compile_mechanisms(data, output):
     return len(manifest)
 
 
-def compile_assets(data, scene="lever"):
+def compile_assets(data, scene="lever", recipe_path=None):
     source = SOURCE / "gba"
-    recipe_path = ROOT / f"assets/rooms/gba-{scene}.json"
+    recipe_path = recipe_path or ROOT / f"assets/rooms/gba-{scene}.json"
     import_deceptus(data, recipe_path, source)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     recipe = json.loads((recipe_path).read_text())
     room = Image.open(source / 'catacombs.png').convert('RGB')
-    patterns, metrics = compile_background(room, OUTPUT)
+    streamed = recipe.get('stream_background', False)
+    patterns, metrics = (compile_streamed_background if streamed else compile_background)(room, OUTPUT)
     actor_colours = compile_actors(Image.open(source / 'actors.png'), OUTPUT)
     mechanism_frames = compile_mechanisms(data, OUTPUT)
     collision_bytes = export_world(source, OUTPUT, recipe)
@@ -161,19 +222,22 @@ def compile_assets(data, scene="lever"):
                  ('gba_background_palette', 'background.pal'), ('gba_actor_palette', 'actors.pal'),
                  ('gba_actor_frames', 'actors.bin'), ('gba_mechanism_frames', 'mechanisms.bin'),
                  ('gba_mechanism_palettes', 'mechanisms.pal'), ('gba_mechanism_table', 'mechanisms.tbl')]
+    if streamed:
+        resources += [('gba_stream_patterns', 'stream-patterns.bin'), ('gba_stream_cells', 'stream-cells.bin')]
     assembly = ['.section .rodata.gba_assets,"a",%progbits']
     header = ['#ifndef GBA_ASSETS_H', '#define GBA_ASSETS_H', '#include "retro/types.h"']
     for label, filename in resources:
         assembly += ['.balign 4', f'.global {label}', f'{label}:', f'.incbin "{(OUTPUT / filename).as_posix()}"']
         header += [f'extern const retro_u8 {label}[];', f'#define {label.upper()}_BYTES {(OUTPUT / filename).stat().st_size}']
+    header += ['#define GBA_CAMPAIGN 0', f'#define GBA_STREAMED_BACKGROUND {int(streamed)}', f'#define GBA_ROOM_COLUMNS {room.width // 8}', f'#define GBA_ROOM_ROWS {room.height // 8}', f'#define GBA_PATTERN_COUNT {patterns}']
     header += ['typedef struct gba_mechanism_resource { retro_u32 offset; retro_u32 palette_offset; retro_u16 bytes; retro_u8 columns, rows, palette_first, palette_count; retro_u16 reserved; } gba_mechanism_resource;',
-               '#define GBA_LEVER_FIRST 0', '#define GBA_SPIKES_FIRST 33', '#define GBA_BLOCK_FIRST 73', '#define GBA_COLLAPSE_FIRST 105',
+               '#define GBA_LEVER_FIRST 0', '#define GBA_SPIKES_FIRST 33', '#define GBA_BLOCK_FIRST 73', '#define GBA_COLLAPSE_FIRST 105', '#define GBA_RAT_FIRST 257', '#define GBA_TRAP_FIRST 327', '#define GBA_MUZZLE_FIRST 331', '#define GBA_ARROW_FIRST 371',
                f'#define GBA_MECHANISM_FRAME_COUNT {mechanism_frames}',
                '#define GBA_ACTOR_FRAME_BYTES 1536', '#define GBA_ACTOR_FRAME_COUNT 19', '#endif', '']
     (OUTPUT / 'data.s').write_text('\n'.join(assembly) + '\n')
     (OUTPUT / 'gba_assets.h').write_text('\n'.join(header))
     report = {'source': 'lossless original-engine import', 'scene': scene, 'scale': '1:1', 'dithering': False,
-              'background_patterns': patterns, 'background_palette_banks': 16, 'background_fidelity': metrics,
+              'background_patterns': patterns, 'background_streamed': streamed, 'background_palette_banks': 16, 'background_fidelity': metrics,
               'actor_opaque_rgb555_colours': actor_colours, 'actor_palette_reduction': False,
               'mechanism_frame_rom_bytes': (OUTPUT / 'mechanisms.bin').stat().st_size,
               'mechanism_transitions': '60Hz C timers; streamed original source animation frames',
@@ -188,6 +252,6 @@ def compile_assets(data, scene="lever"):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data', type=Path, default=ROOT.parent / 'deceptus_engine/data')
-    parser.add_argument("--scene", choices=["lever", "platforms"], default="lever")
+    parser.add_argument("--scene", choices=["lever", "platforms", "preview", "cell"], default="lever")
     args = parser.parse_args()
     compile_assets(args.data, args.scene)

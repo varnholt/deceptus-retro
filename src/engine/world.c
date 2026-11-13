@@ -115,3 +115,19 @@ void retro_move_vertical(const retro_room *room, retro_entity *entity, retro_u8 
 {
     retro_move_vertical_dynamic(room, entity, half_width, height, 0);
 }
+
+retro_i16 retro_wall_side(const retro_room *room, const retro_entity *entity, const retro_mechanism_set *mechanisms)
+{
+    retro_i16 side, column, first, last, row;
+    first = retro_position_cell(entity->y - RETRO_FIXED(24));
+    last = retro_position_cell(entity->y - RETRO_FIXED(8));
+    for (side = -1; side <= 1; side += 2) {
+        column = retro_position_cell(entity->x + RETRO_FIXED(side * 9));
+        for (row = first; row <= last; ++row) {
+            if (collision_cell(room, mechanisms, column, row) & RETRO_SOLID) {
+                return side;
+            }
+        }
+    }
+    return 0;
+}

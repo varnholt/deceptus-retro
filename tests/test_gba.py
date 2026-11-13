@@ -13,6 +13,12 @@ from palettes import palette_rgb555
 ROOT = Path(__file__).resolve().parents[1]
 GENERATED = ROOT / 'assets/generated/gba'
 
+def graphics_folder():
+    budget = GENERATED / 'budget.json'
+    if budget.exists() and json.loads(budget.read_text()).get('scene') == 'tonight':
+        return GENERATED / 'area0'
+    return GENERATED
+
 
 class GbaGraphicsTests(unittest.TestCase):
     def test_nibble_order(self):
@@ -21,37 +27,52 @@ class GbaGraphicsTests(unittest.TestCase):
         self.assertEqual(linear4(image)[:4], bytes([0x10, 0x32, 0x54, 0x76]))
 
     def test_generated_maps_reconstruct_the_gba_image(self):
-        if not (GENERATED / 'room-preview.png').exists():
+        if not (GENERATED / 'budget.json').exists():
             self.skipTest('build the GBA assets to check their hardware maps')
-        expected = Image.open(GENERATED / 'room-preview.png')
-        maps = [struct.unpack(f'<{(GENERATED / f"map{plane}.bin").stat().st_size // 2}H', (GENERATED / f'map{plane}.bin').read_bytes()) for plane in range(2)]
-        patterns = [(GENERATED / f'background{plane}.bin').read_bytes() for plane in range(2)]
-        reconstructed = Image.new('P', expected.size)
-        for top in range(0, expected.height, 8):
-            for left in range(0, expected.width, 8):
-                column, row = left // 8, top // 8
-                address = (column // 32) * 1024 + row * 32 + column % 32
-                for plane in [1, 0]:
-                    entry = maps[plane][address]
-                    tile = patterns[plane][(entry & 1023) * 32:(entry & 1023) * 32 + 32]
-                    self.assertEqual(len(tile), 32)
-                    for pixel_y in range(8):
-                        for pixel_x in range(8):
-                            source_x = 7 - pixel_x if entry & 0x400 else pixel_x
-                            source_y = 7 - pixel_y if entry & 0x800 else pixel_y
-                            packed = tile[source_y * 4 + source_x // 2]
-                            value = (packed >> ((source_x % 2) * 4)) & 15
-                            if value:
-                                reconstructed.putpixel((left + pixel_x, top + pixel_y), value + (entry >> 12) * 16)
-        self.assertEqual(reconstructed.tobytes(), expected.tobytes())
-        self.assertEqual(palette_rgb555(expected, 16), (GENERATED / 'background.pal').read_bytes())
+        campaign = json.loads((GENERATED / 'budget.json').read_text()).get('scene') == 'tonight'
+        folders = [GENERATED / f'area{index}' for index in range(4)] if campaign else [GENERATED]
+        for folder in folders:
+            expected = Image.open(folder / 'room-preview.png')
+            budget = json.loads((folder / 'budget.json').read_text())
+            streamed = budget.get('background_streamed', False)
+            if streamed:
+                data = (folder / 'stream-cells.bin').read_bytes()
+                cells = struct.unpack(f'<{len(data) // 2}H', data)
+                patterns = [(folder / 'stream-patterns.bin').read_bytes()]
+            else:
+                maps = [struct.unpack(f'<{(folder / f"map{plane}.bin").stat().st_size // 2}H', (folder / f'map{plane}.bin').read_bytes()) for plane in range(2)]
+                patterns = [(folder / f'background{plane}.bin').read_bytes() for plane in range(2)]
+            reconstructed = Image.new('P', expected.size)
+            for top in range(0, expected.height, 8):
+                for left in range(0, expected.width, 8):
+                    column, row = left // 8, top // 8
+                    if streamed:
+                        offset = (row * (expected.width // 8) + column) * 2
+                        entries = [(patterns[0], cells[offset], cells[offset + 1])]
+                    else:
+                        address = (column // 32) * 1024 + row * 32 + column % 32
+                        entries = [(patterns[plane], maps[plane][address] & 1023, maps[plane][address] & 0xfc00) for plane in (1, 0)]
+                    for atlas, pattern, attributes in entries:
+                        tile = atlas[pattern * 32:pattern * 32 + 32]
+                        self.assertEqual(len(tile), 32)
+                        for pixel_y in range(8):
+                            for pixel_x in range(8):
+                                source_x = 7 - pixel_x if attributes & 0x400 else pixel_x
+                                source_y = 7 - pixel_y if attributes & 0x800 else pixel_y
+                                packed = tile[source_y * 4 + source_x // 2]
+                                value = (packed >> ((source_x % 2) * 4)) & 15
+                                if value:
+                                    reconstructed.putpixel((left + pixel_x, top + pixel_y), value + (attributes >> 12) * 16)
+            self.assertEqual(reconstructed.tobytes(), expected.tobytes())
+            self.assertEqual(palette_rgb555(expected, 16), (folder / 'background.pal').read_bytes())
 
     def test_actor_frames_preserve_all_original_rgb555_pixels(self):
-        if not (GENERATED / 'actors.bin').exists():
+        folder = graphics_folder()
+        if not (folder / 'actors.bin').exists():
             self.skipTest('build GBA assets to verify its actor frames')
         original = Image.open(ROOT / 'assets/source/gba/actors.png').convert('RGBA')
-        frames = (GENERATED / 'actors.bin').read_bytes()
-        palette = struct.unpack('<256H', (GENERATED / 'actors.pal').read_bytes())
+        frames = (folder / 'actors.bin').read_bytes()
+        palette = struct.unpack('<256H', (folder / 'actors.pal').read_bytes())
         for frame in range(19):
             for piece in range(6):
                 for tile_y in range(2):
@@ -80,20 +101,24 @@ class GbaGraphicsTests(unittest.TestCase):
         self.assertEqual(payload[0xac:0xb0], b'DCPT')
     def test_mechanism_frames_preserve_source_pixels(self):
         source = ROOT.parent / 'deceptus_engine/data/sprites'
-        if not (source / 'levers.png').exists() or not (GENERATED / 'mechanisms-frames.json').exists():
+        folder = graphics_folder()
+        if not (source / 'levers.png').exists() or not (folder / 'mechanisms-frames.json').exists():
             self.skipTest('original assets and a GBA build are required')
-        manifest = json.loads((GENERATED / 'mechanisms-frames.json').read_text())
-        graphics = (GENERATED / 'mechanisms.bin').read_bytes()
-        palettes = (GENERATED / 'mechanisms.pal').read_bytes()
-        table = (GENERATED / 'mechanisms.tbl').read_bytes()
-        self.assertEqual(len(manifest), 257)
+        manifest = json.loads((folder / 'mechanisms-frames.json').read_text())
+        graphics = (folder / 'mechanisms.bin').read_bytes()
+        palettes = (folder / 'mechanisms.pal').read_bytes()
+        table = (folder / 'mechanisms.tbl').read_bytes()
+        self.assertEqual(len(manifest), 387)
         atlases = {}
         for resource, frame in enumerate(manifest):
             if frame['source'] not in atlases:
                 atlases[frame['source']] = Image.open(source / frame['source']).convert('RGBA')
             x, y, width, height = frame['source_rect']
             padded = Image.new('RGBA', frame['size'])
-            padded.alpha_composite(atlases[frame['source']].crop((x, y, x + width, y + height)))
+            image = atlases[frame['source']].crop((x, y, x + width, y + height))
+            if frame.get('rotation'):
+                image = image.transpose({90: Image.Transpose.ROTATE_90, 180: Image.Transpose.ROTATE_180, 270: Image.Transpose.ROTATE_270}[frame['rotation']])
+            padded.alpha_composite(image)
             count, first = frame['palette_count'], frame['palette_first']
             palette = struct.unpack_from(f'<{count}H', palettes, frame['palette_offset'])
             descriptor = struct.unpack_from('<IIH4B2x', table, resource * 16)

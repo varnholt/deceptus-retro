@@ -7,7 +7,7 @@ preview runs the same C simulation. The folder retains its original name,
 
 The full-game port has started; see [PORTING.md](PORTING.md) for the source
 inventory, Lua compilation strategy, verified scope and remaining work. The
-current ROM is still a prototype, not the whole game.
+default GBA ROM is now a four-area playable preview; the whole game remains unfinished.
 
 `deceptus_engine` remains the main repository and the source of truth for game
 content. This repository contains code and conversion recipes. Every build
@@ -19,7 +19,7 @@ Artwork keeps its original size and pixel grid at 1:1. The console screens
 shows less of the world; future visibility improvements should use camera
 framing and scrolling. Palette conversion for the SNES remains necessary.
 
-## Play the prototype
+## Play the preview
 
 The current workspace already has the build tools, emulator cores and ROMs:
 
@@ -37,20 +37,28 @@ currently renders video without audio output. Ordinary emulators can also open
 | --- | --- | --- |
 | Left / Right | D-pad | Move |
 | Z or Space | B or A | Jump; release early for a shorter jump |
-| Up | Up | Operate the lever (GBA); enter the gold portal (SNES) |
-| Enter | Start | Pause / resume |
+| Up | Up | Interact / continue at an exit |
+| Enter | Start | Begin / briefing / pause / replay |
 | R | Select | Restart the room |
 
-The GBA scene starts beside an original lever. Press **Up** to retract its
-linked spike traps, walk right, then jump onto the raised floor. With the traps
-extended, that route damages the player and returns to spawn. **R** restores
-the original lever and trap states. All 12 target links come from the main map.
-The mechanism sprites retain their original pixels and now animate in C,
-including the lever cooldown and deadly trap frames. A second original area
-demonstrates collapsing platforms; see [GBA.md](GBA.md) for scene commands.
+The GBA preview starts at a title screen. Play through the cell, the full
+clockwork antechamber, the spike gallery and the crumbling bridge. Each area
+has a briefing; press Start when ready. The clockwork route uses wall jumps:
+release and press jump again against a wall. The route finishes with a score
+and supports replay. All artwork and enemy/mechanism placements come from the
+main engine checkout; the four-area preview progression is curated here.
 
-The SNES scene retains the clock checkpoint, stand-in patrol and gold portal.
-State is held in RAM only; neither prototype loads a second room.
+The standalone SNES scene retains its clock checkpoint, stand-in patrol and
+gold portal. State is held in RAM; audio and persistent saves are unfinished.
+
+To create a verified, self-contained GBA playtest ZIP:
+
+```powershell
+python tools/package_preview.py --build
+```
+
+See [GBA.md](GBA.md) for resource layout and verified limits. Packaged controls
+and route help come from `assets/release/`.
 
 ## Build from a fresh checkout
 
@@ -169,11 +177,12 @@ much of the original shading and accent colours. It still cannot reproduce
 every original 24-bit colour exactly. See `assets/generated/colour-report.json`
 for measured colour error and exact RGB555 pixel coverage.
 
-The GBA converter independently imports a 768x224 mechanism area selected by
-`assets/rooms/gba-lever.json`, into `assets/source/gba/`. It uses 16 background
-palette banks and 8bpp object frames. Original actor colours and individual
-mechanism-frame colours are preserved through streamed palettes. It does not read the reduced SNES PNG. Its
-graphics, maps, colour report and budget are in `assets/generated/gba/`.
+The default GBA build independently imports four original areas through
+`assets/campaigns/tonight.json`. It uses 15 background palette banks plus a UI
+bank, a visible-tile cache for whole-room scrolling, and streamed 8bpp object
+frames/palettes. Original sprite RGB555 colours are preserved. It does not read
+the reduced SNES PNG. Generated imports and resources stay under
+`assets/source/campaign/` and `assets/generated/gba/`.
 
 The content tools also export supported rectangle mechanisms from the original
 map. GBA connects an original lever to 12 visible, damaging spike traps; SNES
@@ -237,7 +246,7 @@ implemented. Neither existing console build is the complete game yet.
   are implemented; complete enemy scripts, level logic and remaining mechanism visuals/timing remain.
 - Verified in Snes9x and on the Windows native build; **not tested on hardware**.
 
-The next useful engine work is room/resource streaming, improved slopes,
+The next useful engine work is the original room graph and persistent room state, improved slopes,
 profiling the 65816 hot paths, a platform audio consumer for game events,
 save-data serialization, and declarative mechanism/entity import. Add another
 console backend after those interfaces have been exercised by more than one room.

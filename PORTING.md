@@ -3,7 +3,8 @@
 The objective is the playable game described by the current `deceptus_engine`
 checkout, with its original pixel grid, upstream artwork and gameplay data.
 GBA is the first complete-game target, with SNES retained as a secondary backend.
-Both current ROMs are still one-room prototypes. The complete game is not ported.
+GBA now has a four-area curated playable preview; SNES retains its one-room
+prototype. The complete game is not ported.
 
 ## Source inventory
 
@@ -26,11 +27,11 @@ copies of the game. Unused script files are not mistaken for placed enemies.
 | Original system | Port implementation | Current state |
 | --- | --- | --- |
 | Tiled placements/properties | Build-time object catalog and compact C definitions | Full catalog; supported objects in the prototype crop are imported |
-| C++ mechanisms | Reusable C components with source ids and event queues | Checkpoints, sensors, levers, blocks, damage, timed spikes and collapsing platforms; two GBA areas playable |
+| C++ mechanisms | Reusable C components with source ids and event queues | Checkpoints, sensors, levers, blocks, damage, timed spikes and collapsing platforms; four linked GBA preview areas playable |
 | Lua mechanism callbacks | Parse source, resolve selectors, compile bounded action programs | Two original callbacks verified; complete scripts unsupported |
-| Lua enemies | Native C state machines plus shared movement/animation/weapon services | Inventory only; all 16 placed types remain to port |
-| Box2D | Fixed-point character/world collision and specific analytical mechanisms | Grid collision and dynamic rectangle blocks; slopes/joints/water incomplete |
-| Level/cutscene logic | Persistent flags, timed actions, dialogue, inventory and event dispatch | Not implemented |
+| Lua enemies | Native C state machines plus shared movement/animation/weapon services | Rat and arrow trap implemented; 14 placed script types remain to port |
+| Box2D | Fixed-point character/world collision and specific analytical mechanisms | Grid collision, dynamic rectangles and preview wall jumping; slopes/joints/water incomplete |
+| Level/cutscene logic | Persistent flags, timed actions, dialogue, inventory and event dispatch | Curated preview transitions only; original narrative/progression not implemented |
 | Graphics | Lossless import followed by target-specific palette/tile packing | GBA and SNES prototypes; original artwork remains 1:1 |
 | Platform services | Audio, controller mapping, save storage and ROM resource loading | GBA/SNES controls and video; host preview; audio and persistent saves incomplete |
 
@@ -148,11 +149,12 @@ in `assets/source/mechanisms.json`.
    on the actual target. Emulator success alone does not establish hardware
    performance or complete original-physics fidelity.
 
-GBA now demonstrates original lever 113 and its 12 spike-block targets in a
-768x224 area, with source sprites, safe/lethal traversal and restart. Its
-256px background paging is limited to this area. Lever/spike animation and a second area of collapsing platforms are playable.
-Full level Lua dispatch remains unfinished; whole-room resource loading remains
-the dependency for level-wide enemy and progression chains.
+The default GBA build now loads four areas with visible-tile caching and a
+complete title-to-finish preview route. Rat and arrow-trap placements use native
+C, with Lua-derived settings and a differential firing-schedule test. This does
+not finish the original room graph: preview exits are curated, revisiting rooms
+does not preserve arbitrary original progression, and unsupported enemies and
+level scripts remain explicit.
 
 ## Commands and truthful build status
 
@@ -164,6 +166,7 @@ python tools/build_snes.py
 python tools/emulator.py
 python tools/build_gba.py
 python tools/gba_emulator.py
+python tools/package_preview.py --build
 ```
 
 The native build generates the source callback fixture from the original files.

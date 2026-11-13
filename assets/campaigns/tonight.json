@@ -1,0 +1,59 @@
+{
+  "title": "DECEPTUS",
+  "subtitle": "GBA PLAYABLE PREVIEW",
+  "stages": [
+    {
+      "recipe": "gba-cell.json",
+      "title": "THE CELL",
+      "instruction": "RIGHT TO DOOR. UP TO ENTER",
+      "goal": [
+        624,
+        264,
+        64,
+        64
+      ],
+      "hint1": "RATS ARE HARMLESS.",
+      "hint2": "UP AT THE GLOWING DOOR."
+    },
+    {
+      "recipe": "gba-preview.json",
+      "title": "CLOCKWORK ANTECHAMBER",
+      "instruction": "JUMP AGAIN AT WALL. GO RIGHT",
+      "goal": [
+        1160,
+        144,
+        64,
+        104
+      ],
+      "hint1": "JUMP LEFT AROUND THE OVERHANG.",
+      "hint2": "STEER RIGHT. JUMP AT WALL."
+    },
+    {
+      "recipe": "gba-lever.json",
+      "title": "THE SPIKE GALLERY",
+      "instruction": "UP AT LEVER. THEN RIGHT.",
+      "goal": [
+        624,
+        120,
+        48,
+        64
+      ],
+      "disabled_mechanism": 113,
+      "hint1": "UP FLIPS THE ORIGINAL LEVER.",
+      "hint2": "RETRACT THE SPIKES. GO RIGHT."
+    },
+    {
+      "recipe": "gba-platforms.json",
+      "title": "THE CRUMBLING BRIDGE",
+      "instruction": "KEEP MOVING TO THE RIGHT.",
+      "goal": [
+        528,
+        24,
+        48,
+        64
+      ],
+      "hint1": "THE BRIDGE FALLS IF YOU WAIT.",
+      "hint2": "CROSS RIGHT WITHOUT STOPPING."
+    }
+  ]
+}

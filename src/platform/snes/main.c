@@ -13,7 +13,7 @@ extern const retro_room deceptus_room;
 
 static retro_engine engine;
 static retro_frame frame;
-static retro_video_caps video = {256, 224, RETRO_DRAW_CAPACITY};
+static retro_video_caps video = {256, 224, 12};
 static retro_i16 accepted_top[RETRO_DRAW_CAPACITY];
 static retro_i16 accepted_bottom[RETRO_DRAW_CAPACITY];
 

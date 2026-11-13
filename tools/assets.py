@@ -61,6 +61,11 @@ def import_deceptus(data, recipe_path=None, source=SOURCE):
     definitions, targets, unsupported = crop_mechanisms(data, recipe)
     (source / "mechanisms.json").write_text(json.dumps({"definitions": definitions, "targets": targets,
         "unsupported_objects": unsupported, "source_map": recipe["map"]}, indent=2) + "\n")
+    if recipe.get('import_enemies'):
+        from enemies import crop_enemies
+        (source / 'enemies.json').write_text(json.dumps(crop_enemies(data, recipe), indent=2) + "\n")
+    else:
+        (source / 'enemies.json').write_text('{"definitions": [], "paths": [], "unsupported": []}\n')
     manifest = {
         "source_map": "deceptus_engine/data/level-catacombs/catacombs.tmx",
         "crop_pixels": crop,

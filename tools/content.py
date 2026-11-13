@@ -140,6 +140,8 @@ def inventory(data, output):
         "reachable_lua_modules": len(modules), "referenced_host_api": referenced_api,
         "compiled_callbacks": callback_support,
         "native_mechanism_family_placements": mechanism_counts,
+        "native_enemy_family_placements": {name: active_scripts[name] for name in ("rat.lua", "arrowtrap_2.lua") if name in active_scripts},
+        "unported_enemy_types": sorted(set(active_scripts) - {"rat.lua", "arrowtrap_2.lua"}),
         "native_mechanism_scope": "C components; import validates supported settings; not all placements are loaded or drawn",
         "full_game_supported": False,
         "remaining": ["room/resource streaming", "remaining mechanisms", "enemy behavior and animations",
