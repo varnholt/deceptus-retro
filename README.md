@@ -1,8 +1,9 @@
-# Deceptus SNES
+# Deceptus Retro
 
-A playable SNES prototype and the start of a portable C runtime for SNES, GBA
-and Mega Drive. SNES is the only implemented console backend. The desktop
-preview runs the same C simulation.
+A portable C runtime with working GBA and SNES prototypes. GBA is the first
+complete-game target; SNES stays available as a secondary backend. The desktop
+preview runs the same C simulation. The folder retains its original name,
+`deceptus-snes`.
 
 The full-game port has started; see [PORTING.md](PORTING.md) for the source
 inventory, Lua compilation strategy, verified scope and remaining work. The
@@ -14,24 +15,25 @@ reads the original map, tilesets, collision vectors and animation definitions
 from the neighbouring checkout; converted artwork and binary data are ignored.
 There is no second maintained copy of the artwork.
 
-Artwork keeps its original size and pixel grid at 1:1. The smaller SNES screen
+Artwork keeps its original size and pixel grid at 1:1. The console screens
 shows less of the world; future visibility improvements should use camera
 framing and scrolling. Palette conversion for the SNES remains necessary.
 
 ## Play the prototype
 
-The current workspace already has the SDK, emulator core and built ROM:
+The current workspace already has the build tools, emulator cores and ROMs:
 
 ```powershell
 cd D:\deceptus\deceptus-snes
 python tools/play.py
 ```
 
-This opens the actual ROM through a project-local Snes9x core. The small player
-currently renders video without audio output. An ordinary SNES emulator can
-also open `build/snes/deceptus.sfc`.
+This opens the actual GBA ROM through the project-local mGBA core. Use
+`python tools/play.py --backend snes` for the SNES version. The small player
+currently renders video without audio output. Ordinary emulators can also open
+`build/gba/deceptus.gba` or `build/snes/deceptus.sfc`.
 
-| Keyboard | SNES pad | Action |
+| Keyboard | Console pad | Action |
 | --- | --- | --- |
 | Left / Right | D-pad | Move |
 | Z or Space | B or A | Jump; release early for a shorter jump |
@@ -47,7 +49,8 @@ damage also returns there. State is held in RAM only. It does not load a second 
 
 ## Build from a fresh checkout
 
-Use Python 3.10+ and Pillow. Keep the repositories side by side:
+Use Python 3.10+ and the packages in `requirements.txt`. GBA compilation uses
+LLVM's `clang`, `ld.lld` and `llvm-objcopy` on PATH. Keep the repositories side by side:
 
 ```text
 workspace/
@@ -57,20 +60,34 @@ workspace/
 
 ```powershell
 python -m pip install -r requirements.txt
-python tools/bootstrap.py --emulator
-python tools/build_snes.py
+python tools/bootstrap.py --target gba --emulator
+python tools/build_gba.py
 python tools/play.py
 ```
 
-The bootstrap downloads PVSnesLib 4.7.0 into `.tools/pvsneslib` and, on Windows
-x64, an optional Snes9x libretro core. No global SDK installation, Docker or
-MSYS shell is required. Download URLs and hashes are recorded in the ignored
-`.tools/downloads.json`. The emulator download follows a nightly channel;
-PVSnesLib is pinned by version. Both tools can instead be supplied locally.
+The GBA bootstrap downloads the public header reference and, optionally, mGBA
+for Windows x64 into `.tools/`. The build uses a small freestanding platform
+layer and needs no global console SDK, Docker or MSYS shell. It was verified
+with LLVM 18.1.8 on Windows. See [GBA.md](GBA.md) for layout, build options and
+current limitations.
+
+For the SNES toolchain and prototype:
+
+```powershell
+python tools/bootstrap.py --target snes --emulator
+python tools/build_snes.py
+python tools/play.py --backend snes
+```
+
+The SNES bootstrap installs project-local PVSnesLib 4.7.0 and optionally Snes9x.
+Download URLs and hashes are recorded in `.tools/downloads.json`; emulator cores
+follow nightly channels. Tools can instead be supplied locally.
 
 ```powershell
 python tools/build_snes.py --sdk C:/snesdev/pvsneslib --data D:/other/deceptus_engine/data
-python tools/play.py --core C:/emulators/snes9x_libretro.dll
+python tools/play.py --backend snes --core C:/emulators/snes9x_libretro.dll
+python tools/build_gba.py --data D:/other/deceptus_engine/data
+python tools/play.py --core C:/emulators/mgba_libretro.dll
 ```
 
 The build script also handles the SDK's native Linux/macOS executable names.
@@ -98,6 +115,7 @@ Run actual ROM checks after changing its backend:
 
 ```powershell
 python tools/emulator.py
+python tools/gba_emulator.py
 ```
 
 The route boots the ROM, checks movement, jump/landing, simulation timing,
@@ -146,9 +164,10 @@ much of the original shading and accent colours. It still cannot reproduce
 every original 24-bit colour exactly. See `assets/generated/colour-report.json`
 for measured colour error and exact RGB555 pixel coverage.
 
-A future GBA converter must start from the same lossless import and choose its
-own palette strategy. It must not read the already reduced SNES PNG. GBA colour
-and tile encoding belong to that backend; no GBA game build is implemented yet.
+The GBA converter starts from that same lossless import. It uses 16 background
+palette banks and 8bpp object frames, preserving all 48 opaque RGB555 actor
+colours in the current import. It does not read the reduced SNES PNG. Its
+graphics, maps, colour report and budget are in `assets/generated/gba/`.
 
 The content tools also export supported rectangle mechanisms from the original
 map. Checkpoints are active in the prototype; native fixtures test lever/block
@@ -169,6 +188,7 @@ region from the actual PPU output against the converted image on the RGB555 grid
 | `src/engine/` | Reusable grid collision, fixed-point math and bounded entity allocation |
 | `src/game/` | Deceptus movement, patrol, damage, checkpoint, portal and animation rules |
 | `src/platform/snes/` | PVSnesLib input, background setup, OAM packing, display timing |
+| `src/platform/gba/` | ARM startup, GBA registers, two background planes, object streaming and display timing |
 | `src/platform/host/` | Shared-library bridge for the desktop preview |
 | `tools/` | Original-content import, offline conversion, build and verification |
 
@@ -188,7 +208,8 @@ art, audio and performance budgets.
 
 The current `retro_engine`/`retro_room` structs include prototype game state and
 spawn fields. They are a starting interface, not a frozen general engine ABI.
-There are no GBA/Mega Drive backend stubs and neither target is claimed working.
+GBA and SNES both build and pass real-ROM integration checks. Mega Drive is not
+implemented. Neither existing console build is the complete game yet.
 
 ## Current SNES budget and limitations
 

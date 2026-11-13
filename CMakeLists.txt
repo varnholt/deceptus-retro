@@ -5,6 +5,10 @@ set(CMAKE_C_STANDARD 90)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(DECEPTUS_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../deceptus_engine/data" CACHE PATH "authoritative Deceptus game data")
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_custom_target(gba_rom
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/build_gba.py" --data "${DECEPTUS_DATA_DIR}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMENT "building the GBA ROM from the original content")
 
 add_custom_target(convert_assets
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/assets.py" --import-data "${DECEPTUS_DATA_DIR}"

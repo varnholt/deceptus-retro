@@ -113,6 +113,7 @@ typedef struct retro_engine {
     retro_i16 checkpoint_y;
     retro_u16 checkpoint_id;
     retro_u8 content_error;
+    retro_i16 camera_y;
 } retro_engine;
 
 /* initializes caller-owned state; room and collision storage must outlive it. */

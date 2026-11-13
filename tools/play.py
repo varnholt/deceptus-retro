@@ -1,4 +1,4 @@
-"""Play the real SNES ROM or the shared C desktop build in a small Tk window."""
+"""Play the GBA/SNES ROM or shared C desktop build in a small Tk window."""
 
 import argparse
 import ctypes as C
@@ -27,7 +27,8 @@ class Host:
     def run(self, buttons):
         self.library.preview_tick(buttons)
         camera = self.library.preview_state(2)
-        canvas = self.room.crop((camera, 0, camera + 256, 224)).convert("RGBA")
+        camera_y = self.library.preview_state(11)
+        canvas = self.room.crop((camera, camera_y, camera + 256, camera_y + 224)).convert("RGBA")
         for index in range(12):
             frame = self.library.preview_draw(index, 2)
             if frame < 0:
@@ -51,16 +52,22 @@ def play(backend, core, library):
     window.title(f"Deceptus — {backend} | arrows move / Z jump / Up enter / Enter pause / R restart")
     canvas = tk.Label(window, borderwidth=0)
     canvas.pack()
-    emulator = Emulator(core, ROOT / "build/snes/deceptus.sfc") if backend == "snes" else None
+    if backend == 'gba':
+        emulator = Emulator(core, ROOT / 'build/gba/deceptus.gba', {'mgba_use_bios': 'OFF', 'mgba_frameskip': '0'})
+    elif backend == 'snes':
+        emulator = Emulator(core, ROOT / 'build/snes/deceptus.sfc')
+    else:
+        emulator = None
     host = Host(library) if backend == "host" else None
     keys = set()
     window.bind("<KeyPress>", lambda event: keys.add(event.keysym.lower()))
     window.bind("<KeyRelease>", lambda event: keys.discard(event.keysym.lower()))
     window.bind("<FocusOut>", lambda event: keys.clear())
     deadline = time.perf_counter()
+    timer = None
 
     def refresh():
-        nonlocal deadline
+        nonlocal deadline, timer
         if emulator:
             mapping = {"left": 6, "right": 7, "z": 0, "space": 0, "up": 4, "return": 3, "r": 2}
             emulator.run(1, [value for key, value in mapping.items() if key in keys])
@@ -73,15 +80,19 @@ def play(backend, core, library):
                     buttons |= value
             image = host.run(buttons)
         if image:
-            canvas.image = ImageTk.PhotoImage(image.resize((768, 672), Image.Resampling.NEAREST))
+            canvas.image = ImageTk.PhotoImage(image.resize((image.width * 3, image.height * 3), Image.Resampling.NEAREST))
             canvas.configure(image=canvas.image)
         deadline += 1 / 60
         now = time.perf_counter()
         if deadline < now - 0.1:
             deadline = now
-        window.after(max(1, round((deadline - now) * 1000)), refresh)
+        timer = window.after(max(1, round((deadline - now) * 1000)), refresh)
 
     def close():
+        nonlocal timer
+        if timer is not None:
+            window.after_cancel(timer)
+            timer = None
         if emulator:
             emulator.close()
         window.destroy()
@@ -93,8 +104,9 @@ def play(backend, core, library):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--backend", choices=["snes", "host"], default="snes")
-    parser.add_argument("--core", type=Path, default=ROOT / ".tools/snes9x/snes9x_libretro.dll")
+    parser.add_argument("--backend", choices=["gba", "snes", "host"], default="gba")
+    parser.add_argument("--core", type=Path)
     parser.add_argument("--library", type=Path, default=ROOT / "build/host/Debug/retro_preview.dll")
     args = parser.parse_args()
-    play(args.backend, args.core, args.library)
+    core = args.core or ROOT / ('.tools/mgba/mgba_libretro.dll' if args.backend == 'gba' else '.tools/snes9x/snes9x_libretro.dll')
+    play(args.backend, core, args.library)

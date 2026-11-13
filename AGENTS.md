@@ -10,7 +10,7 @@
 - Use caller-owned memory, fixed-capacity pools and bounded event/render queues. Do not add heap allocation or floating point to frame-time runtime code.
 - Positions are signed 12.4 fixed point in room coordinates. Velocities must stay below one 8px collision cell per tick. Larger worlds must use room/chunk origins, not overflow local coordinates.
 - Treat logical frames and palette roles as game assets. Encode SNES/GBA/Mega Drive tile, palette, DMA and sprite details in converters and backends.
-- Keep GBA and Mega Drive as future backends until they compile and run. Do not add placeholder implementations that report success.
-- Verify changes with native engine/converter tests and, for SNES changes, the actual ROM integration route in `tools/emulator.py`.
+- GBA is the first complete-game target. Keep the working SNES backend as a secondary target. Mega Drive remains future work; do not add placeholder implementations that report success.
+- Verify changes with native engine/converter tests and the actual ROM integration routes: `tools/gba_emulator.py` for GBA and `tools/emulator.py` for SNES. Shared changes must preserve both.
 - Keep unsupported mechanisms and Lua constructs explicit in content reports and build errors. A passing prototype build does not establish full-game support. Compare compiled callbacks against original Lua execution where possible.
 - Preserve ownership and dependency notices. Do not add attribution trailers to commits.

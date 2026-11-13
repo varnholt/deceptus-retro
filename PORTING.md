@@ -2,7 +2,8 @@
 
 The objective is the playable game described by the current `deceptus_engine`
 checkout, with its original pixel grid, upstream artwork and gameplay data.
-The current ROM is still a one-room prototype. The complete game is not ported.
+GBA is the first complete-game target, with SNES retained as a secondary backend.
+Both current ROMs are still one-room prototypes. The complete game is not ported.
 
 ## Source inventory
 
@@ -30,11 +31,11 @@ copies of the game. Unused script files are not mistaken for placed enemies.
 | Lua enemies | Source-derived behavior programs plus native movement/animation/weapon services | Inventory only; all 16 placed types remain to port |
 | Box2D | Fixed-point character/world collision and specific analytical mechanisms | Grid collision and dynamic rectangle blocks; slopes/joints/water incomplete |
 | Level/cutscene logic | Persistent flags, timed actions, dialogue, inventory and event dispatch | Not implemented |
-| Graphics | Lossless import followed by target-specific palette/tile packing | SNES prototype; original artwork remains 1:1 |
-| Platform services | Audio, controller mapping, save storage and ROM resource loading | SNES controls/video; host preview; audio and persistent saves incomplete |
+| Graphics | Lossless import followed by target-specific palette/tile packing | GBA and SNES prototypes; original artwork remains 1:1 |
+| Platform services | Audio, controller mapping, save storage and ROM resource loading | GBA/SNES controls and video; host preview; audio and persistent saves incomplete |
 
 The reusable C runtime does not include SFML, Lua or a console SDK. Backend
-registers stay in platform code. A GBA build must use the original content import
+registers stay in platform code. The GBA build uses the original content import
 and its own graphics encoder, rather than reuse the SNES-reduced images.
 
 ## Lua stays upstream
@@ -129,6 +130,8 @@ cmake --build build/host --config Debug
 ctest --test-dir build/host -C Debug --output-on-failure
 python tools/build_snes.py
 python tools/emulator.py
+python tools/build_gba.py
+python tools/gba_emulator.py
 ```
 
 The native build generates the source callback fixture from the original files.

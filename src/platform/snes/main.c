@@ -148,8 +148,8 @@ int main(void)
         debug_write();
         WaitForVBlank();
         /* only register writes occur here; all OAM work is buffered above. */
-        bgSetScroll(0, frame.camera_x, 0);
-        bgSetScroll(1, frame.camera_x, 0);
+        bgSetScroll(0, frame.camera_x, frame.camera_y);
+        bgSetScroll(1, frame.camera_x, frame.camera_y);
         setBrightness(engine.paused ? 7 : 15);
     }
     return 0;

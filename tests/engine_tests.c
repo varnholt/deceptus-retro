@@ -146,6 +146,14 @@ int main(void)
     engine.entities[0].x = RETRO_FIXED(510);
     retro_tick(&engine, 0);
     CHECK(engine.camera_x == 256);
+    /* the smaller GBA viewport follows vertically without rescaling the world. */
+    reset();
+    engine.video.width = 240;
+    engine.video.height = 160;
+    retro_tick(&engine, 0);
+    CHECK(engine.camera_y == 64);
+    retro_render(&engine, &frame);
+    CHECK(frame.camera_y == 64 && frame.draws[0].y == 80);
     printf("engine checks passed; state uses %lu bytes on this host\n", (unsigned long)sizeof(engine));
     return 0;
 }

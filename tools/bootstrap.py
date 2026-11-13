@@ -34,16 +34,35 @@ def extract(archive, destination):
                     (destination / entry.filename).chmod(permissions)
 
 
-def bootstrap(emulator=False):
+def bootstrap(emulator=False, target='snes'):
     folder = ROOT / ".tools"
     folder.mkdir(exist_ok=True)
     operating_system = {"Windows": "windows", "Linux": "linux", "Darwin": "darwin"}[platform.system()]
+    if target == 'gba':
+        manifest_path = folder / 'downloads.json'
+        manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+        url = 'https://raw.githubusercontent.com/devkitPro/gba-tools/master/src/gbafix.c'
+        checksum = download(url, folder / 'gbafix-reference.c')
+        manifest['gba_header_reference'] = {'url': url, 'sha256': checksum}
+        if emulator:
+            if operating_system != 'windows' or platform.machine().lower() not in ('amd64', 'x86_64'):
+                raise SystemExit('header reference installed; supply a native mGBA libretro core with --core')
+            url = 'https://buildbot.libretro.com/nightly/windows/x86_64/latest/mgba_libretro.dll.zip'
+            archive = folder / 'mgba_libretro.zip'
+            checksum = download(url, archive)
+            extract(archive, folder / 'mgba')
+            manifest['mgba'] = {'url': url, 'sha256': checksum, 'channel': 'nightly'}
+        manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+        print('GBA reference tools installed; the build uses clang, ld.lld and llvm-objcopy from LLVM')
+        return
     filename = f"pvsneslib_{RELEASE}_64b_{operating_system}_release.zip"
     archive = folder / filename
     url = f"https://github.com/alekmaul/pvsneslib/releases/download/{VERSION}/{filename}"
     checksum = download(url, archive)
     extract(archive, folder)
-    manifest = {"pvsneslib": {"version": VERSION, "url": url, "sha256": checksum}}
+    manifest_path = folder / 'downloads.json'
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    manifest['pvsneslib'] = {"version": VERSION, "url": url, "sha256": checksum}
     if emulator:
         if operating_system != "windows" or platform.machine().lower() not in ("amd64", "x86_64"):
             raise SystemExit("SDK installed; provide a native Snes9x libretro core with --core on this platform")
@@ -59,5 +78,6 @@ def bootstrap(emulator=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--emulator", action="store_true", help="also fetch Windows x64 Snes9x libretro")
+    parser.add_argument('--target', choices=['snes', 'gba'], default='snes')
     args = parser.parse_args()
-    bootstrap(args.emulator)
+    bootstrap(args.emulator, args.target)

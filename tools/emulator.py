@@ -39,7 +39,7 @@ INPUT_STATE = C.CFUNCTYPE(C.c_int16, C.c_uint, C.c_uint, C.c_uint, C.c_uint)
 
 
 class Emulator:
-    def __init__(self, core, rom):
+    def __init__(self, core, rom, options=None):
         self.core = C.CDLL(str(Path(core).resolve()))
         self.buttons = set()
         self.pixel_format = 0
@@ -49,6 +49,7 @@ class Emulator:
         self.directory = str((ROOT / "artifacts").resolve()).encode()
         Path(self.directory.decode()).mkdir(exist_ok=True)
         self.defaults = []
+        self.options = {key.encode(): value.encode() for key, value in (options or {}).items()}
         self.environment_callback = ENVIRONMENT(self.environment)
         self.video_callback = VIDEO(self.video)
         self.audio_callback = AUDIO(lambda left, right: None)
@@ -88,9 +89,10 @@ class Emulator:
         if command in (9, 30, 31):  # system, content, save directories
             C.cast(data, C.POINTER(C.c_char_p))[0] = self.directory
             return True
-        if command == 15:  # variable: let the core use its own defaults
-            C.cast(data, C.POINTER(Variable))[0].value = None
-            return False
+        if command == 15:
+            variable = C.cast(data, C.POINTER(Variable))[0]
+            variable.value = self.options.get(variable.key)
+            return variable.value is not None
         if command == 17:
             C.cast(data, C.POINTER(C.c_bool))[0] = False
             return True
@@ -139,15 +141,15 @@ class Emulator:
         pointer = self.core.retro_get_memory_data(2)
         return C.string_at(pointer, size)
 
-    def debug(self):
+    def debug(self, camera_y=False):
         memory = self.memory()
         marker = memory.find(b"\xce\xd3")
         if marker < 0:
             raise RuntimeError("game debug mailbox not found: game has not reached its loop")
-        values = struct.unpack_from("<16H", memory, marker)
+        values = struct.unpack_from("<17H" if camera_y else "<16H", memory, marker)
         return dict(zip(["magic", "x", "y", "camera_x", "ticks", "paused", "health", "grounded",
                          "door_entries", "events", "draws", "patrol_active", "checkpoint_id",
-                         "checkpoint_x", "checkpoint_y", "content_error"], values))
+                         "checkpoint_x", "checkpoint_y", "content_error", "camera_y"], values))
 
     def screenshot(self, path):
         if self.last_image is None:

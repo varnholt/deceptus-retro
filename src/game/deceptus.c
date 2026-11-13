@@ -260,6 +260,18 @@ void retro_tick(retro_engine *engine, retro_u16 buttons)
         target = maximum_camera;
     }
     engine->camera_x = target;
+    target = retro_floor(player->y) - (retro_i16)(engine->video.height * 3 / 4);
+    maximum_camera = engine->room->rows * RETRO_CELL_SIZE - engine->video.height;
+    if (maximum_camera < 0) {
+        maximum_camera = 0;
+    }
+    if (target < 0) {
+        target = 0;
+    }
+    if (target > maximum_camera) {
+        target = maximum_camera;
+    }
+    engine->camera_y = target;
 }
 
 void retro_render(const retro_engine *engine, retro_frame *frame)
@@ -270,14 +282,14 @@ void retro_render(const retro_engine *engine, retro_frame *frame)
     retro_draw *draw;
     frame->count = 0;
     frame->camera_x = engine->camera_x;
-    frame->camera_y = 0;
+    frame->camera_y = engine->camera_y;
     for (index = 0; index < RETRO_ENTITY_CAPACITY; ++index) {
         entity = &engine->entities[index];
         if (!entity->active || (index == 0 && engine->hurt_ticks && ((engine->hurt_ticks / 4) & 1))) {
             continue;
         }
         screen_x = retro_floor(entity->x) - engine->camera_x - 16;
-        screen_y = retro_floor(entity->y) - 48;
+        screen_y = retro_floor(entity->y) - engine->camera_y - 48;
         if (screen_x <= -32 || screen_x >= engine->video.width || screen_y <= -48 || screen_y >= engine->video.height) {
             continue;
         }

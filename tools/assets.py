@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 from tiled import TiledMap, collision_grid
 from palettes import banked_background, palette_rgb555
 from content import crop_mechanisms
+from world_export import export_world
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "assets" / "source"
@@ -188,29 +189,7 @@ def compile_assets():
         "#define ROOM_PALETTE_BYTES 256\n"
         f"#define ACTOR_PATTERN_BYTES {len(actor_tiles) * 32}\n")
     recipe = json.loads((ROOT / "assets/rooms/catacombs.json").read_text())
-    solid = collision_grid(Image.open(SOURCE / "collision.png"), recipe["collision_cell"], recipe["coverage_threshold"])
-    one_way = collision_grid(Image.open(SOURCE / "one_way.png"), threshold=0.125)
-    collision = [1 if first else 2 if second else 0 for first, second in zip(solid, one_way)]
-    (GENERATED / "collision.bin").write_bytes(bytes(collision))
-    lines = ["#include \"retro/engine.h\"", "", "static const retro_u8 room_collision[] = {"]
-    lines += ["    " + ",".join(map(str, collision[offset:offset + 64])) + "," for offset in range(0, len(collision), 64)]
-    coordinates = recipe["spawn"] + recipe["patrol"] + recipe["door"]
-    lines += ["};", ""]
-    mechanisms = json.loads((SOURCE / "mechanisms.json").read_text())
-    definitions, targets = mechanisms["definitions"], mechanisms["targets"]
-    if definitions:
-        lines += ["static const retro_mechanism_def room_mechanisms[] = {"]
-        for definition in definitions:
-            bounds = ', '.join(map(str, definition['bounds']))
-            lines.append(f"    {{{definition['source_id']}, {{{bounds}}}, {definition['target_first']}, "
-                         f"{definition['target_count']}, {definition['value']}, {definition['kind']}, "
-                         f"{definition['enabled']}, {definition['flags']}}},")
-        lines += ["};", ""]
-    if targets:
-        lines += ["static const retro_u16 room_targets[] = {" + ', '.join(map(str, targets)) + "};", ""]
-    lines += ["const retro_room deceptus_room = {", "    room_collision, 64, 28, " + ", ".join(map(str, coordinates)) + ",",
-              f"    {'room_mechanisms' if definitions else '0'}, {len(definitions)}, {'room_targets' if targets else '0'}, {len(targets)}", "};", ""]
-    (GENERATED / "room.c").write_text("\n".join(lines))
+    collision_bytes = export_world(SOURCE, GENERATED, recipe)
     sections = []
     for label, filename in [("room_patterns", "room.pic"), ("room_palette", "room.pal"),
                             ("room_map", "room.map"), ("overflow_patterns", "overflow.pic"),
@@ -220,7 +199,7 @@ def compile_assets():
     (GENERATED / "data.asm").write_text('.include "hdr.asm"\n\n' + "\n".join(sections))
     report = {"background_tiles": len(tiles), "background_tile_limit": 1279,
               "background_vram_bytes": (len(tiles) + 1) * 32, "tilemap_vram_bytes": 8192,
-              "object_vram_bytes": len(actor_tiles) * 32, "collision_rom_bytes": len(collision),
+              "object_vram_bytes": len(actor_tiles) * 32, "collision_rom_bytes": collision_bytes,
               "background_palettes": 8, "colour_fidelity": colour_metrics,
               "object_palettes": 2, "max_logical_draws": 12,
               "objects_per_actor": 6, "worst_objects_on_scanline": 24,

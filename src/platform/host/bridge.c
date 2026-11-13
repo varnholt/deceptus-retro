@@ -52,6 +52,8 @@ PREVIEW_API int preview_state(int field)
         return engine.checkpoint_x;
     case 10:
         return engine.checkpoint_y;
+    case 11:
+        return engine.camera_y;
     default:
         return 0;
     }
