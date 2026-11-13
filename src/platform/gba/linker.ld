@@ -10,6 +10,7 @@ SECTIONS
     .text : {
         KEEP(*(.gba_header))
         KEEP(*(.text.reset))
+        *(.romtext*)
         *(EXCLUDE_FILE (*world.o *enemies.o *deceptus.o *mechanisms.o *main.o) .text*)
         *(.rodata*)
         . = ALIGN(4);

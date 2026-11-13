@@ -1,12 +1,12 @@
 # Current status
 
-Updated for local Playtest 06, 13 November 2026.
+Updated for local Playtest 07, 13 November 2026.
 
 ## Available targets
 
 | Target | Current scope |
 | --- | --- |
-| GBA tutorial | Twelve imported opening rooms; source UI, inventory/flags, selected interactions, menus and automatic connections |
+| GBA tutorial | Thirteen imported opening rooms; source UI, inventory/flags, selected interactions, menus and automatic connections |
 | GBA curated preview | Four areas with a separately verified title-to-finish route, enemies, mechanisms and replay |
 | SNES | Retained one-room clock/checkpoint/patrol/portal prototype |
 | Native host | Shared simulation and small preview, plus engine/converter tests |
@@ -16,7 +16,7 @@ Updated for local Playtest 06, 13 November 2026.
 
 The tutorial imports The Cell, Lower Cells, Crossroads, Upper Cells, The Cellar,
 Guards' Office, Main Hall, Altar of the Blind Owl, Clockwork Antechamber, The
-Loop, The Sewers and Fool's Ledge. Source room ids are retained in generated
+Loop, The Sewers, Fool's Ledge and Mines Antechamber. Source room ids are retained in generated
 reports. Original asset ownership and artwork remain in the main engine repo.
 
 Implemented opening rules include source cellmate/bed text, the key and locker,
@@ -35,7 +35,9 @@ than assuming every adjacent room's walkways have identical heights.
 
 - Original ground blob patrol, source animation, contact damage and stomp death.
 - Basic swimming with source water detection and full directional swim sprites.
-- Original foam/shrine tile animations, with fast source frames sampled at 60Hz.
+- Original shrine tile animation and one-shot falling-entry splash; no ambient looping splash.
+- Underwater tint, a small exit hop, original upward wind and delayed wetsuit warning.
+- Main Hall/Mines Antechamber passage verified in both directions.
 - Mechanism files named after their original counterparts; public C namespace `deceptus_`.
 - GitHub Actions build and source-revision-recorded cartridge artifacts.
 - Original bitmap font at 13px; title headings use exact 2x copies of those pixels.
@@ -44,7 +46,7 @@ than assuming every adjacent room's walkways have identical heights.
 - Separate room-title tile storage while world interaction cues are active.
 - Pause header lowered two pixels, functional options/controls and confirmation.
 - Lower Crossroads/Fool's Ledge connection and western cellar darkness warning.
-- Player visible underwater, with water body/foam behind the baked surface.
+- Player visible underwater, with water-body artwork behind the baked surface.
 
 ## Evidence
 
@@ -55,8 +57,13 @@ checks pass for the retained prototype.
 
 GBA checks boot the actual ROM and exercise menu navigation. Controlled-start
 fixtures check floor/UI scenes, the darkness warning, underwater visibility,
-water-surface rendering, original foam/shrine frame advancement, a blob scene
-and a Crossroads/Fool's Ledge return trip. Their reports
+water-surface rendering, original shrine frame advancement, a blob scene,
+a Crossroads/Fool's Ledge return trip and the Main Hall/Mines connection.
+A 240-display-frame scrolling water check recorded one simulation tick per
+display frame, with zero missed ticks. The player pauses when unfocused and
+reuses its display image buffer. This timing result covers the tested scene;
+it is not a whole-game performance guarantee. The delayed wetsuit warning
+keeps the simulation running while the original upward wind applies. Their reports
 and screenshots are generated locally by `tools/verify_tutorial.py`. These are
 fixture checks, not a full tutorial input route. No physical hardware testing or
 complete-game performance guarantee is claimed.
@@ -66,7 +73,7 @@ complete-game performance guarantee is claimed.
 1. Finish and repeatedly play the original opening route under final movement
    tuning, including the Loop and descent to the Sewers. Resolve every required
    gate and source callback instead of adding progression shortcuts.
-2. Refine swimming/entry/exit fidelity, add reactive splashes and remaining traversal abilities;
+2. Refine swimming/entry/exit fidelity and add remaining traversal abilities;
    refine collision fidelity and profile demanding rooms.
 3. Complete cutscenes, dialogue presentation and original menu/inventory behavior.
 4. Port additional enemies and mechanisms to reusable C services, retaining
@@ -82,5 +89,8 @@ The first commercial-quality target remains GBA. The reusable C engine can grow
 alongside that work; SNES is a secondary compatibility/performance effort and
 Mega Drive remains future work.
 
-The empty doorway reported in playtesting still needs its room/route identified
-before the missing connection can be matched to the original map.
+The Mines entrance is connected. Its farther locked iron door and actual wetsuit
+acquisition remain unsupported. The current water blocker stays enabled.
+
+GitHub Actions successfully built and tested revision e3c67cd and uploaded its
+cartridge artifact; subsequent revisions require their own successful run.

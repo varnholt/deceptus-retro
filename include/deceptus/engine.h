@@ -31,6 +31,8 @@
 #define DECEPTUS_PLAYER 1
 #define DECEPTUS_PATROL 2
 #define DECEPTUS_DOOR 3
+#define DECEPTUS_PLAYER_SWIM 8
+#define DECEPTUS_WATER_SPLASH 10
 
 #define DECEPTUS_EVENT_JUMP 1
 #define DECEPTUS_EVENT_HURT 2
@@ -54,6 +56,7 @@ struct deceptus_path_point;
 
 typedef struct deceptus_water_configuration {
     deceptus_u8 speed, rise_speed, sink_speed, stroke_delay_ticks, gravity, stroke_force;
+    deceptus_u8 splash_durations[20];
 } deceptus_water_configuration;
 
 typedef struct deceptus_room {
@@ -163,6 +166,8 @@ typedef struct deceptus_engine {
     deceptus_i16 camera_y;
     deceptus_projectile projectiles[DECEPTUS_PROJECTILE_CAPACITY];
     deceptus_u16 deaths, projectiles_fired;
+    deceptus_i16 splash_x, splash_y;
+    deceptus_u8 splash_active, splash_frame, splash_elapsed;
 } deceptus_engine;
 
 /* initializes caller-owned state; room and collision storage must outlive it. */

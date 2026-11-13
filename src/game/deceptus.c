@@ -361,6 +361,21 @@ void deceptus_tick(deceptus_engine *engine, deceptus_u16 buttons)
             engine->checkpoint_y = mechanism->bounds.y + mechanism->bounds.height;
             engine->checkpoint_id = mechanism->source_id;
             deceptus_event_push(engine, DECEPTUS_EVENT_CHECKPOINT);
+        } else if (mechanism_event->kind == DECEPTUS_MECH_FORCE) {
+            player->velocity_x += (deceptus_i8)(mechanism_event->value & 255);
+            player->velocity_y += (deceptus_i8)(mechanism_event->value >> 8);
+            if (player->velocity_x > 127) {
+                player->velocity_x = 127;
+            }
+            if (player->velocity_x < -127) {
+                player->velocity_x = -127;
+            }
+            if (player->velocity_y > 127) {
+                player->velocity_y = 127;
+            }
+            if (player->velocity_y < -127) {
+                player->velocity_y = -127;
+            }
         } else if (mechanism_event->kind == DECEPTUS_MECH_HIT) {
             hurt(engine, mechanism_event->value);
         }
@@ -387,6 +402,7 @@ void deceptus_render(const deceptus_engine *engine, deceptus_frame *frame)
     frame->count = 0;
     frame->camera_x = engine->camera_x;
     frame->camera_y = engine->camera_y;
+    deceptus_player_water_render(engine, frame);
     for (index = 0; index < DECEPTUS_ENTITY_CAPACITY; ++index) {
         entity = &engine->entities[index];
         if (entity->kind >= DECEPTUS_RAT || !entity->active ||

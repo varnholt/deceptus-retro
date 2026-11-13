@@ -29,6 +29,7 @@ set(DECEPTUS_MECHANISM_PARTS
     src/engine/mechanisms/sensorrect.c
     src/engine/mechanisms/spikeblock.c
     src/engine/mechanisms/switchanimation.c
+    src/engine/mechanisms/wind.c
     src/engine/mechanisms/mechanisminternal.h)
 set_source_files_properties(${DECEPTUS_MECHANISM_PARTS} PROPERTIES HEADER_FILE_ONLY TRUE)
 target_sources(deceptus_engine PRIVATE ${DECEPTUS_MECHANISM_PARTS})

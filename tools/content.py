@@ -170,7 +170,7 @@ def crop_mechanisms(data, recipe):
     left, top, width, height = recipe["crop_pixels"]
     supported = {"checkpoints": "DECEPTUS_MECH_CHECKPOINT", "sensor_rects": "DECEPTUS_MECH_SENSOR",
                  "levers": "DECEPTUS_MECH_LEVER", "blocking_rects": "DECEPTUS_MECH_BLOCK",
-                 "collapsing_platforms": "DECEPTUS_MECH_COLLAPSING", "on_off_blocks": "DECEPTUS_MECH_BLOCK", "spike_blocks": "DECEPTUS_MECH_SPIKES", "damage_rects": "DECEPTUS_MECH_DAMAGE"}
+                 "collapsing_platforms": "DECEPTUS_MECH_COLLAPSING", "on_off_blocks": "DECEPTUS_MECH_BLOCK", "spike_blocks": "DECEPTUS_MECH_SPIKES", "damage_rects": "DECEPTUS_MECH_DAMAGE", "wind": "DECEPTUS_MECH_WIND"}
     selected, unsupported = [], []
     for obj in objects:
         if obj["x"] >= left + width or obj["y"] >= top + height or obj["x"] + max(1, obj["width"]) <= left or obj["y"] + max(1, obj["height"]) <= top:
@@ -212,6 +212,15 @@ def crop_mechanisms(data, recipe):
         boolean = lambda value: str(value).lower() in ("true", "1")
         flags = int(boolean(props.get("inverted", False))) | (0 if boolean(props.get("handle_available", True)) else 2)
         value = int(props.get("damage", 100)) if obj["group"] in ("damage_rects", "spike_blocks") else int(props.get("index", 0))
+        if obj['group']=='wind':
+            import math
+            dx=float(props.get('direction_x',0));dy=float(props.get('direction_y',0))
+            length=math.hypot(dx,dy)
+            if 'strength' in props and length:
+                dx=dx/length*float(props['strength']);dy=dy/length*float(props['strength'])
+            fx,fy=round(dx*16),round(-dy*16)
+            if not(-127<=fx<=127 and -127<=fy<=127):raise ValueError('wind force exceeds native fixed-step budget')
+            value=(fx&255)|((fy&255)<<8)
         if not 0 <= value <= 65535:
             raise ValueError(f'mechanism {obj["id"]}: value {value} exceeds the supported unsigned 16-bit range')
         animated = obj['group'] in ('levers', 'on_off_blocks', 'spike_blocks')

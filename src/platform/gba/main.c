@@ -1,3 +1,4 @@
+#include "deceptus/adventure.h"
 #include "deceptus/enemies.h"
 #include "deceptus/engine.h"
 #include "gba_assets.h"
@@ -43,6 +44,7 @@ static gba_object objects[128] __attribute__((aligned(4)));
 static deceptus_u16 uploaded_frame[3];
 static const deceptus_draw *actor_draws[3];
 static deceptus_u16 actor_count;
+static deceptus_u16 swim_palette[32] __attribute__((aligned(4)));
 typedef struct gba_upload {
     deceptus_u16 resource;
     deceptus_u16 offset;
@@ -107,9 +109,21 @@ static deceptus_u16 input_read(void)
     return buttons;
 }
 
-static void video_init(void)
+static void __attribute__((section(".romtext"))) video_init(void)
 {
     deceptus_u16 index;
+    {
+        const gba_mechanism_resource *resource;
+        const deceptus_u16 *palette;
+        deceptus_u16 colour;
+        resource = &((const gba_mechanism_resource *)gba_mechanism_table)[GBA_SWIM_FIRST];
+        palette = (const deceptus_u16 *)(gba_mechanism_palettes + resource->palette_offset);
+        for (index = 0; index < 32; ++index) {
+            colour = palette[index];
+            swim_palette[index] = ((colour & 31) * 3 / 4) | (((((colour >> 5) & 31) * 3 + 14) / 4) << 5) |
+                                  (((((colour >> 10) & 31) * 3 + 18) / 4) << 10);
+        }
+    }
     REG_DISPLAY = 1 << 6;
     dma_copy(gba_background0, (void *)0x06000000, GBA_BACKGROUND0_BYTES);
     dma_copy(gba_background1, (void *)0x06008000, GBA_BACKGROUND1_BYTES);
@@ -269,7 +283,9 @@ static void enemy_objects(deceptus_u16 *count, const deceptus_draw *draw)
     deceptus_i16 x, y;
     const gba_mechanism_resource *entry;
     gba_object *object;
-    if (draw->kind == DECEPTUS_BLOB_2) {
+    if (draw->kind == DECEPTUS_WATER_SPLASH) {
+        resource = GBA_SPLASH_FIRST + draw->frame;
+    } else if (draw->kind == DECEPTUS_BLOB_2) {
         resource = GBA_BLOB_FIRST + draw->frame;
     } else if (draw->kind == DECEPTUS_PLAYER_SWIM) {
         resource = GBA_SWIM_FIRST + draw->frame;
@@ -412,8 +428,10 @@ static void video_commit(void)
         const gba_mechanism_resource *entry;
         entry = &((const gba_mechanism_resource *)gba_mechanism_table)[uploads[index].resource];
         dma_copy(gba_mechanism_frames + entry->offset, (void *)(0x06010000 + uploads[index].offset), entry->bytes);
-        dma_copy(gba_mechanism_palettes + entry->palette_offset, (void *)(0x05000200 + entry->palette_first * 2),
-                 entry->palette_count * 2);
+        dma_copy(uploads[index].resource >= GBA_SWIM_FIRST && uploads[index].resource < GBA_SWIM_FIRST + 26
+                     ? (const void *)swim_palette
+                     : (const void *)(gba_mechanism_palettes + entry->palette_offset),
+                 (void *)(0x05000200 + entry->palette_first * 2), entry->palette_count * 2);
     }
     maps_commit();
     hud_commit();
@@ -423,8 +441,13 @@ static void video_commit(void)
     REG16(0x04000014) = frame.camera_x & 511;
     REG16(0x04000016) = frame.camera_y;
 #if GBA_CAMPAIGN
-    REG16(0x04000050) = (engine.paused || campaign.mode != DECEPTUS_CAMPAIGN_PLAYING) ? (3 << 6) | 0x13 : 0;
-    REG16(0x04000054) = (engine.paused || campaign.mode != DECEPTUS_CAMPAIGN_PLAYING) ? 8 : 0;
+    REG16(0x04000050) =
+        (engine.paused || (campaign.mode != DECEPTUS_CAMPAIGN_PLAYING && campaign.mode != DECEPTUS_NOTIFICATION))
+            ? (3 << 6) | 0x13
+            : 0;
+    REG16(0x04000054) =
+        (engine.paused || (campaign.mode != DECEPTUS_CAMPAIGN_PLAYING && campaign.mode != DECEPTUS_NOTIFICATION)) ? 8
+                                                                                                                  : 0;
 #else
     REG16(0x04000050) = engine.paused ? (3 << 6) | 0x13 : 0;
     REG16(0x04000054) = engine.paused ? 8 : 0;

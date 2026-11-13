@@ -33,7 +33,8 @@ deceptus_u8 deceptus_interaction_available(const deceptus_adventure *game, const
             (interaction->cost_item < DECEPTUS_INVENTORY_ITEMS && game->inventory.counts[interaction->cost_item]));
 }
 
-void deceptus_adventure_init(deceptus_adventure *game, const deceptus_adventure_def *definition, const deceptus_video_caps *video)
+void deceptus_adventure_init(deceptus_adventure *game, const deceptus_adventure_def *definition,
+                             const deceptus_video_caps *video)
 {
     deceptus_video_caps saved_video;
     saved_video = *video;
@@ -74,6 +75,8 @@ static void load_room(deceptus_adventure *game, deceptus_u8 room, deceptus_u16 b
         memcpy(engine->mechanisms.states, game->saved[room], sizeof(game->saved[room]));
     }
     engine->previous_buttons = buttons;
+    game->automatic_action = 0;
+    game->automatic_ticks = 0;
     game->portal_cooldown = 12;
     game->room_label_ticks = 120;
     game->prompt = 255;
@@ -104,13 +107,14 @@ static deceptus_u8 interact(deceptus_adventure *game, const deceptus_interaction
     }
     game->flags |= action->set_flags;
     deceptus_event_push(&game->campaign.engine, action->grant_item  ? DECEPTUS_EVENT_ITEM
-                                             : action->effect    ? DECEPTUS_EVENT_LEVER_INSERT
-                                             : action->cost_item ? DECEPTUS_EVENT_DOOR
-                                                                 : DECEPTUS_EVENT_DIALOGUE);
+                                                : action->effect    ? DECEPTUS_EVENT_LEVER_INSERT
+                                                : action->cost_item ? DECEPTUS_EVENT_DOOR
+                                                                    : DECEPTUS_EVENT_DIALOGUE);
     if (action->page_count) {
         game->dialogue = action;
         game->page = 0;
-        game->campaign.mode = DECEPTUS_DIALOGUE;
+        game->campaign.mode =
+            (action->effect & DECEPTUS_ACTION_NOTIFICATION) ? DECEPTUS_NOTIFICATION : DECEPTUS_DIALOGUE;
     }
     return 1;
 }
@@ -165,7 +169,8 @@ deceptus_u8 deceptus_adventure_tick(deceptus_adventure *game, deceptus_u16 butto
         if (pressed & (DECEPTUS_UP | DECEPTUS_DOWN)) {
             game->selection ^= 1;
         }
-        if ((pressed & DECEPTUS_BACK) || ((pressed & (DECEPTUS_ACCEPT | DECEPTUS_JUMP | DECEPTUS_PAUSE)) && game->selection)) {
+        if ((pressed & DECEPTUS_BACK) ||
+            ((pressed & (DECEPTUS_ACCEPT | DECEPTUS_JUMP | DECEPTUS_PAUSE)) && game->selection)) {
             campaign->mode = game->options_return;
             game->selection = 0;
         } else if (pressed & (DECEPTUS_ACCEPT | DECEPTUS_JUMP | DECEPTUS_PAUSE)) {
@@ -193,6 +198,12 @@ deceptus_u8 deceptus_adventure_tick(deceptus_adventure *game, deceptus_u16 butto
         }
         engine->previous_buttons = buttons;
         return 0;
+    }
+    if (campaign->mode == DECEPTUS_NOTIFICATION && (pressed & (DECEPTUS_ACCEPT | DECEPTUS_JUMP | DECEPTUS_UP))) {
+        if (++game->page >= game->dialogue->page_count) {
+            campaign->mode = DECEPTUS_CAMPAIGN_PLAYING;
+            game->dialogue = 0;
+        }
     }
     if (campaign->mode == DECEPTUS_DIALOGUE) {
         if (pressed & (DECEPTUS_ACCEPT | DECEPTUS_JUMP | DECEPTUS_UP | DECEPTUS_PAUSE)) {
@@ -257,7 +268,14 @@ deceptus_u8 deceptus_adventure_tick(deceptus_adventure *game, deceptus_u16 butto
     for (index = 0; index < room->interaction_count; ++index) {
         action = &room->interactions[index];
         if (deceptus_interaction_available(game, action) && overlaps(&action->bounds, x, y)) {
-            game->prompt = index;
+            game->prompt = action->automatic ? 255 : index;
+            if (action->automatic > 1) {
+                if (!game->automatic_action) {
+                    game->automatic_action = action;
+                    game->automatic_ticks = action->automatic;
+                }
+                break;
+            }
             if ((action->page_count || action->cost_item || action->grant_item || action->set_flags ||
                  action->effect) &&
                 (action->automatic || (pressed & DECEPTUS_UP)) && interact(game, action)) {
@@ -268,9 +286,19 @@ deceptus_u8 deceptus_adventure_tick(deceptus_adventure *game, deceptus_u16 butto
             break;
         }
     }
+    if (game->automatic_action && game->automatic_ticks) {
+        --game->automatic_ticks;
+    }
     deaths = engine->deaths;
     deceptus_tick(engine, buttons & ~(DECEPTUS_PAUSE | DECEPTUS_RESTART));
     campaign->deaths += engine->deaths - deaths;
+    if (game->automatic_action && !game->automatic_ticks) {
+        action = game->automatic_action;
+        game->automatic_action = 0;
+        if (deceptus_interaction_available(game, action)) {
+            interact(game, action);
+        }
+    }
     ++campaign->elapsed_ticks;
     if (++campaign->subsecond >= 60) {
         campaign->subsecond = 0;

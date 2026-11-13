@@ -50,7 +50,7 @@ def export_world(source, output, recipe):
     if enemies['paths']:
         lines += ['static const deceptus_path_point room_paths[] = {' + ', '.join('{' + ','.join(map(str, point)) + '}' for point in enemies['paths']) + '};', '']
     if recipe.get('water_physics'):
-        lines += ['static const deceptus_water_configuration room_water = {'+', '.join(map(str,recipe['water_physics']))+'};']
+        lines += ['static const deceptus_water_configuration room_water = {'+', '.join(map(str,recipe['water_physics']))+', {'+','.join(map(str,recipe.get('water_splash_ticks',[0]*20)))+'}};']
     coordinates = recipe["spawn"] + recipe["patrol"] + recipe["door"]
     lines += ['const deceptus_room deceptus_scene = {', f'    room_collision, {columns}, {rows}, ' + ', '.join(map(str, coordinates)) + ',',
               f"    {'room_mechanisms' if definitions else '0'}, {len(definitions)}, {'room_targets' if targets else '0'}, {len(targets)}, {'room_timings' if definitions else '0'},",

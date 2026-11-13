@@ -5,7 +5,6 @@
 #define DECEPTUS_ARROW_TRAP 5
 #define DECEPTUS_ARROW 6
 #define DECEPTUS_ARROW_MUZZLE 7
-#define DECEPTUS_PLAYER_SWIM 8
 #define DECEPTUS_BLOB_2 9
 
 typedef struct deceptus_path_point {

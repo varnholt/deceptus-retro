@@ -46,7 +46,8 @@ static void collapse_tick(deceptus_mechanism_set *set, deceptus_u16 index, const
     }
 }
 
-static deceptus_u8 collapsing_platform_solid(const deceptus_mechanism_set *set, deceptus_u16 index, const deceptus_rect *bounds)
+static deceptus_u8 collapsing_platform_solid(const deceptus_mechanism_set *set, deceptus_u16 index,
+                                             const deceptus_rect *bounds)
 {
     return set->states[index].active && set->states[index].enabled && overlaps(bounds, &set->definitions[index].bounds);
 }

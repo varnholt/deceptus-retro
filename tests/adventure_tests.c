@@ -11,12 +11,13 @@ int main(void)
     static const deceptus_campaign_goal goals[2] = {{{0, 0, 1, 1}, 0}, {{0, 0, 1, 1}, 0}};
     static const char *const pages[] = {"Original dialogue.", "Second page."};
     static const char *const names[] = {"", "Key", "Handle"};
-    static const deceptus_mechanism_def lever = {581, {144, 144, 48, 48}, 0, 0,
-                                              0,   DECEPTUS_MECH_LEVER,   1, DECEPTUS_MECH_MISSING_HANDLE};
+    static const deceptus_mechanism_def lever = {581, {144, 144, 48, 48},  0, 0,
+                                                 0,   DECEPTUS_MECH_LEVER, 1, DECEPTUS_MECH_MISSING_HANDLE};
     static const deceptus_interaction actions[] = {
         {1385, {24, 144, 32, 48}, pages, 0, 2, 2, 0, 2, 0, 1, 0, 0},
         {1432, {88, 144, 32, 48}, pages, 0, 1, 1, 0, 2, 1, 2, 0, 0},
-        {581, {144, 144, 48, 48}, pages, 1, 8, 8, 581, 2, 2, 0, DECEPTUS_ACTION_HANDLE, 0}};
+        {581, {144, 144, 48, 48}, pages, 1, 8, 8, 581, 2, 2, 0, DECEPTUS_ACTION_HANDLE, 0},
+        {945, {200, 144, 32, 48}, pages, 0, 64, 64, 0, 2, 0, 0, DECEPTUS_ACTION_NOTIFICATION, 3}};
     static const deceptus_portal right = {{248, 144, 8, 64}, -256, 0, 1, DECEPTUS_PORTAL_RIGHT, 0, 0, 0};
     static const deceptus_portal left = {{0, 144, 8, 64}, 256, 0, 0, DECEPTUS_PORTAL_LEFT, 0, 0, 0};
     deceptus_adventure_room settings[2];
@@ -45,7 +46,7 @@ int main(void)
     settings[0].portals = &right;
     settings[0].portal_count = 1;
     settings[0].interactions = actions;
-    settings[0].interaction_count = 3;
+    settings[0].interaction_count = 4;
     settings[1].portals = &left;
     settings[1].portal_count = 1;
     settings[1].interactions = 0;
@@ -118,6 +119,22 @@ int main(void)
     assert(!deceptus_inventory_remove(&game.inventory, 15));
     game.inventory.counts[1] = 255;
     assert(!deceptus_inventory_add(&game.inventory, 1));
+    deceptus_adventure_init(&game, &definition, &video);
+    deceptus_adventure_tick(&game, DECEPTUS_PAUSE);
+    deceptus_adventure_tick(&game, 0);
+    deceptus_place_player(&game.campaign.engine, 210, 192);
+    for (index = 0; index < 4; ++index) {
+        deceptus_adventure_tick(&game, 0);
+    }
+    assert(game.campaign.mode == DECEPTUS_NOTIFICATION && (game.flags & 64));
+    tick = game.campaign.engine.ticks;
+    deceptus_adventure_tick(&game, DECEPTUS_RIGHT);
+    deceptus_adventure_tick(&game, 0);
+    assert(game.campaign.engine.ticks == tick + 2);
+    deceptus_adventure_tick(&game, DECEPTUS_ACCEPT);
+    deceptus_adventure_tick(&game, 0);
+    deceptus_adventure_tick(&game, DECEPTUS_ACCEPT);
+    assert(game.campaign.mode == DECEPTUS_CAMPAIGN_PLAYING);
     puts("adventure item use, dialogue, menus and persistent room state checks passed");
     return 0;
 }

@@ -3,7 +3,7 @@
 The objective is the playable game described by the current `deceptus_engine`
 checkout, with its original pixel grid, upstream artwork and gameplay data.
 GBA is the first complete-game target, with SNES retained as a secondary backend.
-GBA now has a twelve-room opening under development and a separate four-area
+GBA now has a thirteen-room opening under development and a separate four-area
 curated playable preview. SNES retains its one-room prototype. The complete
 game is not ported. See [current status](docs/STATUS.md) for verified scope.
 
@@ -50,7 +50,7 @@ source placement counts for these families are:
 | --- | ---: | --- |
 | Collapsing platforms | 44 | Foot contact, continued countdown once touched, collapse, blocked respawn, restore delay and dynamic collision |
 | On/off blocks | 30 | Linked/interval control, inverted state, bounded transition queue and animation/collision state |
-| Spike blocks | 12 | Linked/interval control, original animation and damage on frames 29–35 |
+| Spike blocks | 12 | Linked/interval control, original animation and damage on frames 29â€“35 |
 | Sensors | 12 | Rectangle enter/leave events |
 | Blocking rectangles | 6 | Enabled/inverted dynamic collision |
 | Checkpoints | 6 | Source identity and respawn activation |

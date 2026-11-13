@@ -231,7 +231,7 @@ static void hud_prepare(void)
         hud_image(gba_menu_main[adventure.selection], 0, 0);
         return;
     }
-    if (campaign.mode == DECEPTUS_DIALOGUE && adventure.dialogue) {
+    if ((campaign.mode == DECEPTUS_DIALOGUE || campaign.mode == DECEPTUS_NOTIFICATION) && adventure.dialogue) {
         for (index = 0; index < GBA_UI_PRESENTATIONS; ++index) {
             presentation = &gba_ui_presentations[index];
             if (presentation->action == adventure.dialogue) {

@@ -2,7 +2,7 @@
 #define DECEPTUS_ADVENTURE_H
 #include "deceptus/campaign.h"
 
-#define DECEPTUS_ADVENTURE_ROOMS 12
+#define DECEPTUS_ADVENTURE_ROOMS 16
 #define DECEPTUS_INVENTORY_ITEMS 16
 #define DECEPTUS_DIALOGUE 4
 #define DECEPTUS_MENU_PAUSE 5
@@ -11,10 +11,12 @@
 #define DECEPTUS_MENU_EXIT 8
 #define DECEPTUS_MENU_OPTIONS 9
 #define DECEPTUS_MENU_CONFIRM 10
+#define DECEPTUS_NOTIFICATION 11
 #define DECEPTUS_PORTAL_LEFT 1
 #define DECEPTUS_PORTAL_RIGHT 2
 #define DECEPTUS_PORTAL_DOWN 3
 #define DECEPTUS_ACTION_HANDLE 1
+#define DECEPTUS_ACTION_NOTIFICATION 128
 
 typedef struct deceptus_inventory {
     deceptus_u8 counts[DECEPTUS_INVENTORY_ITEMS];
@@ -59,6 +61,8 @@ typedef struct deceptus_adventure {
     deceptus_u8 visited[DECEPTUS_ADVENTURE_ROOMS];
     deceptus_u16 flags;
     const deceptus_interaction *dialogue;
+    const deceptus_interaction *automatic_action;
+    deceptus_u8 automatic_ticks;
     deceptus_u8 page, selection, prompt, portal_cooldown, room_label_ticks, menu_return, options_return;
 } deceptus_adventure;
 

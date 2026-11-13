@@ -4,7 +4,7 @@ A portable C game engine and console adaptation of Deceptus. **GBA is the first
 complete-game target.** A working SNES prototype is retained; Mega Drive is a
 future backend. The local folder currently keeps the name `deceptus-snes`.
 
-The latest development build is the original prison opening, with twelve
+The latest development build is the original prison opening, with thirteen
 imported rooms, source dialogue, inventory and lever interactions, automatic
 room changes, native player artwork, foreground occlusion and menus. This is
 an intermediate playtest: the complete game and opening progression are not
@@ -23,7 +23,7 @@ Keep both checkouts beside one another:
 ```text
 workspace/
   deceptus_engine/data/
-  deceptus-deceptus/          this repository; may still be named deceptus-snes
+  deceptus-snes/          this repository; may still be named deceptus-snes
 ```
 
 Install Python, the requirements below, and LLVM with `clang`, `ld.lld` and
@@ -62,21 +62,22 @@ audio playback are not implemented yet.
 
 ## Current development build
 
-Playtest 06 uses the original Deceptum bitmap font at its authored 13px size.
+Playtest 07 uses the original Deceptum bitmap font at its authored 13px size.
 Large headings are exact 2x pixel copies, not newly rasterized 24px glyphs.
 The opening also includes:
 
 - Original ground-patrol blob, including its animated movement, contact damage and stomp death.
 - Basic swimming using source atmosphere tiles, original swim sprites and a delayed A-button ascent.
-- Original animated foam and shrine-column tiles, played independently on their source layers.
+- Original animated shrine column and a one-shot splash only when falling into water.
+- Small water-exit hop, underwater colour tint and the original upward wind/wetsuit warning.
 - New Game, Options and Quit; pause, controls, inventory and quit confirmation.
 - Native-size dialogue windows, paged source text and animated interaction cues.
 - The key, locker, lever handle and missing-handle rules, plus persistent flags
   and mechanism state when returning to a room.
-- Original room entrance rectangles, including Crossroads to Fool's Ledge.
+- Original room entrance rectangles, including Crossroads to Fool's Ledge and Main Hall to Mines Antechamber.
 - Original one-way floor decoration and player occlusion by foreground artwork.
 - Streamed room graphics and offline baked water surfaces; the player remains
-  visible underwater. Reactive entry splashes and complete water/progression fidelity remain unfinished.
+  visible underwater. Complete water/progression fidelity remains unfinished.
 
 See [current status](docs/STATUS.md) for verified coverage and open work. Imported
 rooms and working isolated actions do not establish a complete playable route.

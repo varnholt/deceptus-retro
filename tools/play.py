@@ -68,12 +68,25 @@ def play(backend, core, library, rom=None):
     keys = set()
     window.bind("<KeyPress>", lambda event: keys.add(event.keysym.lower()))
     window.bind("<KeyRelease>", lambda event: keys.discard(event.keysym.lower()))
-    window.bind("<FocusOut>", lambda event: keys.clear())
     deadline = time.perf_counter()
     timer = None
+    focused = True
+
+    def focus_changed(event):
+        nonlocal focused,deadline
+        focused = event.type == tk.EventType.FocusIn
+        keys.clear()
+        deadline = time.perf_counter()
+
+    window.bind('<FocusOut>',focus_changed)
+    window.bind('<FocusIn>',focus_changed)
 
     def refresh():
         nonlocal deadline, timer
+        if not focused:
+            deadline=time.perf_counter()
+            timer=window.after(100,refresh)
+            return
         if emulator:
             mapping = {"left": 6, "right": 7, "z": 0, "space": 0, "up": 4, "return": 3, "r": 2}
             if backend == 'gba':
@@ -88,9 +101,13 @@ def play(backend, core, library, rom=None):
                     buttons |= value
             image = host.run(buttons)
         if image:
-            canvas.image = ImageTk.PhotoImage(image.resize((image.width * 3, image.height * 3), Image.Resampling.NEAREST))
-            canvas.configure(image=canvas.image)
-        deadline += 1 / 60
+            scaled=image.resize((image.width*3,image.height*3),Image.Resampling.NEAREST)
+            if hasattr(canvas,'image'):
+                canvas.image.paste(scaled)
+            else:
+                canvas.image=ImageTk.PhotoImage(scaled)
+                canvas.configure(image=canvas.image)
+        deadline += 1 / (emulator.fps if emulator else 60)
         now = time.perf_counter()
         if deadline < now - 0.1:
             deadline = now

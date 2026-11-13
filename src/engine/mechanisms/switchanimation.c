@@ -21,7 +21,8 @@ static void animate_switch(deceptus_mechanism_set *set, deceptus_u16 index)
         enabled = state->pending & 1;
         state->pending >>= 1;
         --state->pending_count;
-        if (set->definitions[index].kind == DECEPTUS_MECH_BLOCK && (set->definitions[index].flags & DECEPTUS_MECH_INVERTED)) {
+        if (set->definitions[index].kind == DECEPTUS_MECH_BLOCK &&
+            (set->definitions[index].flags & DECEPTUS_MECH_INVERTED)) {
             enabled = !enabled;
         }
         state->active = enabled;

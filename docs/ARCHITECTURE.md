@@ -85,7 +85,7 @@ player frames supply the presentation.
 
 `deceptus_adventure` wraps the campaign/engine and stores inventory counts,
 progression flags, active dialogue/page, menu selection, portal cooldown and
-per-room mechanism snapshots. Current capacities are twelve rooms and sixteen
+per-room mechanism snapshots. Current capacities are sixteen rooms (thirteen imported) and sixteen
 inventory slots, including reserved item zero. Progression is in-memory only.
 
 Interactions refer to source identities and bounded rectangles. Required and
@@ -146,3 +146,8 @@ source idle/walk animation cycles, pulsed movement, contact damage and stomp
 lifecycle. Ground-patrol sprite transitions are compared against execution of
 the original Lua with identical position inputs. Jumping and ceiling-drop
 variants are reported as unsupported rather than being approximated as patrols.
+
+`mechanisms/wind.c` maps the source wind direction to a bounded player-force
+event. `player/playerwater.c` owns swim motion, exit impulse and the fixed-state
+one-shot splash. Delayed adventure notifications advance independently of the
+simulation, so the wetsuit warning does not freeze the upward water blocker.

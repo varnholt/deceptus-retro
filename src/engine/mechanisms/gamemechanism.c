@@ -30,6 +30,7 @@ static void emit(deceptus_mechanism_set *set, deceptus_u16 source_id, deceptus_u
 #include "sensorrect.c"
 #include "spikeblock.c"
 #include "switchanimation.c"
+#include "wind.c"
 
 deceptus_i16 deceptus_mechanism_find(const deceptus_mechanism_set *set, deceptus_u16 source_id)
 {
@@ -42,8 +43,8 @@ deceptus_i16 deceptus_mechanism_find(const deceptus_mechanism_set *set, deceptus
     return -1;
 }
 
-deceptus_u8 deceptus_mechanisms_init(deceptus_mechanism_set *set, const deceptus_mechanism_def *definitions, deceptus_u16 count,
-                               const deceptus_u16 *targets, deceptus_u16 target_count)
+deceptus_u8 deceptus_mechanisms_init(deceptus_mechanism_set *set, const deceptus_mechanism_def *definitions,
+                                     deceptus_u16 count, const deceptus_u16 *targets, deceptus_u16 target_count)
 {
     deceptus_u16 index, previous, target;
     memset(set, 0, sizeof(*set));
@@ -112,7 +113,8 @@ deceptus_u8 deceptus_mechanism_enable(deceptus_mechanism_set *set, deceptus_u16 
     enabled = enabled != 0;
     if (set->states[index].enabled != enabled) {
         if (set->timings && (set->timings[index].flags & DECEPTUS_TIMED_ANIMATION) &&
-            (set->definitions[index].kind == DECEPTUS_MECH_BLOCK || set->definitions[index].kind == DECEPTUS_MECH_SPIKES)) {
+            (set->definitions[index].kind == DECEPTUS_MECH_BLOCK ||
+             set->definitions[index].kind == DECEPTUS_MECH_SPIKES)) {
             if (set->states[index].pending_count >= 8) {
                 set->overflow = 1;
                 return 0;
@@ -169,7 +171,9 @@ void deceptus_mechanisms_tick(deceptus_mechanism_set *set, const deceptus_rect *
             } else if (definition->kind == DECEPTUS_MECH_SENSOR) {
                 sensor_rect_contact(set, index, inside);
             } else if (inside) {
-                if (definition->kind == DECEPTUS_MECH_DAMAGE) {
+                if (definition->kind == DECEPTUS_MECH_WIND) {
+                    wind_contact(set, index);
+                } else if (definition->kind == DECEPTUS_MECH_DAMAGE) {
                     damage_rect_contact(set, index);
                 } else if (definition->kind == DECEPTUS_MECH_SPIKES) {
                     spike_block_contact(set, index);

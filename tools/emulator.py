@@ -26,6 +26,18 @@ class SystemInfo(C.Structure):
                 ("valid_extensions", C.c_char_p), ("need_fullpath", C.c_bool), ("block_extract", C.c_bool)]
 
 
+class Geometry(C.Structure):
+    _fields_=[('base_width',C.c_uint),('base_height',C.c_uint),('max_width',C.c_uint),('max_height',C.c_uint),('aspect_ratio',C.c_float)]
+
+
+class Timing(C.Structure):
+    _fields_=[('fps',C.c_double),('sample_rate',C.c_double)]
+
+
+class SystemAVInfo(C.Structure):
+    _fields_=[('geometry',Geometry),('timing',Timing)]
+
+
 class Variable(C.Structure):
     _fields_ = [("key", C.c_char_p), ("value", C.c_char_p)]
 
@@ -76,6 +88,10 @@ class Emulator:
         if not self.core.retro_load_game(C.byref(game)):
             self.core.retro_deinit()
             raise RuntimeError("emulator refused the ROM")
+        self.core.retro_get_system_av_info.argtypes=[C.POINTER(SystemAVInfo)]
+        av=SystemAVInfo();self.core.retro_get_system_av_info(C.byref(av))
+        self.fps=av.timing.fps if 40<av.timing.fps<120 else 60.0
+        self.sample_rate=av.timing.sample_rate
         self.core.retro_get_memory_data.argtypes = [C.c_uint]
         self.core.retro_get_memory_data.restype = C.c_void_p
         self.core.retro_get_memory_size.argtypes = [C.c_uint]

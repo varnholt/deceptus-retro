@@ -28,7 +28,8 @@ static void lever_configure(deceptus_mechanism_state *state)
     state->frame = state->enabled ? 22 : 0;
 }
 
-static deceptus_u8 lever_interact(deceptus_mechanism_set *set, deceptus_u16 index, deceptus_u8 inside, deceptus_u8 interact_pressed)
+static deceptus_u8 lever_interact(deceptus_mechanism_set *set, deceptus_u16 index, deceptus_u8 inside,
+                                  deceptus_u8 interact_pressed)
 {
     deceptus_u16 target;
     deceptus_i16 slot;
@@ -40,7 +41,8 @@ static deceptus_u8 lever_interact(deceptus_mechanism_set *set, deceptus_u16 inde
         for (target = 0; target < definition->target_count; ++target) {
             slot = deceptus_mechanism_find(set, set->targets[definition->target_first + target]);
             if (set->timings && (set->timings[slot].flags & DECEPTUS_TIMED_ANIMATION) &&
-                (set->definitions[slot].kind == DECEPTUS_MECH_BLOCK || set->definitions[slot].kind == DECEPTUS_MECH_SPIKES) &&
+                (set->definitions[slot].kind == DECEPTUS_MECH_BLOCK ||
+                 set->definitions[slot].kind == DECEPTUS_MECH_SPIKES) &&
                 set->states[slot].enabled == state->enabled && set->states[slot].pending_count >= 8) {
                 break;
             }

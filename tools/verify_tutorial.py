@@ -18,7 +18,8 @@ from emulator import Emulator, ROOT
 FIXTURES = [('floor', 2, 480, 336), ('exit', 2, 720, 576),
             ('dark', 4, 84, 288), ('water', 6, 448, 600),
             ('surface', 6, 420, 384), ('bed', 0, 270, 312),
-            ('shrine', 7, 580, 336), ('foam',6,420,384), ('blob',8,700,432),
+            ('shrine', 7, 580, 336), ('blob',8,700,432), ('mines',6,40,360), ('gate',6,400,528),
+            ('performance',6,420,384),
             ('title', -1, 0, 0)]
 
 
@@ -84,7 +85,37 @@ def verify(core, clang, linker, objcopy, fixture_name=None):
                                 {'mgba_use_bios': 'OFF', 'mgba_frameskip': '0'})
             try:
                 emulator.run(40)
-                if name == 'exit':
+                if name == 'mines':
+                    for _ in range(60):
+                        emulator.run(1,[6])
+                        if state(emulator)[28]==12:break
+                    assert state(emulator)[28]==12,state(emulator)
+                    emulator.run(16);emulator.screenshot(output/'mines-room.png')
+                    for _ in range(100):
+                        emulator.run(1,[7])
+                        if state(emulator)[28]==6:break
+                    assert state(emulator)[28]==6,state(emulator)
+                elif name == 'gate':
+                    emulator.run(70)
+                    values=state(emulator)
+                    assert values[36]&64 and values[29]==11,values
+                    assert values[2]<540,values
+                    ticks=values[4];emulator.run(20)
+                    assert ((state(emulator)[4]-ticks)&65535)>=19,'warning froze gameplay'
+                elif name == 'performance':
+                    emulator.run(60)
+                    missed=0;steps=240
+                    for tick in range(steps):
+                        before=state(emulator)
+                        emulator.run(1,[6] if tick%40<10 or tick%40>=30 else [7])
+                        after=state(emulator)
+                        assert not after[15],after
+                        assert before[28]==after[28]==6 and before[29]==after[29]==1,after
+                        delta=(after[4]-before[4])&65535
+                        if delta!=1:missed+=1
+                    report['water_scrolling_timing']={'display_frames':steps,'non_unit_tick_steps':missed}
+                    assert missed<=2,report['water_scrolling_timing']
+                elif name == 'exit':
                     for _ in range(30):
                         emulator.run(1, [7])
                         if state(emulator)[28] == 11:

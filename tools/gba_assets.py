@@ -201,14 +201,18 @@ def compile_mechanisms(data, output):
                       ('trap-muzzles', 24, 24, 8, 40, 52, 24, True),
                       ('../weapons/arrow.png', 24, 24, 15, 16, 80, 16, True),
                       ('player-swim',72,48,8,26,128,32,True),
-                      ('enemy_blob_2.png',72,72,16,61,96,32,True)]
+                      ('enemy_blob_2.png',72,72,16,61,96,32,True),
+                      ('player-splash',72,72,20,20,160,28,True)]
     for filename, width, height, columns, count, palette_first, palette_count, shared in specifications:
-        actual_filename = 'player.png' if filename=='player-swim' else 'enemy_arrowtrap_2.png' if filename.startswith('trap-') else filename
+        actual_filename = 'player.png' if filename in ('player-swim','player-splash') else 'enemy_arrowtrap_2.png' if filename.startswith('trap-') else filename
         atlas = Image.open(data / 'sprites' / actual_filename).convert('RGBA')
         rects, rotations = [], []
         for index in range(count):
             rotation = None
-            if filename=='enemy_blob_2.png':
+            if filename=='player-splash':
+                spec=json.loads((data/'sprites/animations.json').read_text())['player_water_splash']
+                x,y=spec['frame_offset'];rect=[x+index*72,y,72,72]
+            elif filename=='enemy_blob_2.png':
                 row=0 if index<15 else 1 if index<31 else 2 if index<47 else 5
                 column=index if index<15 else index-15 if index<31 else index-31 if index<47 else index-47
                 rect=[column*72,row*72,72,72]
@@ -339,7 +343,7 @@ def compile_assets(data, scene="lever", recipe_path=None):
                'typedef struct gba_background_animation { deceptus_u16 left, top, columns, rows, frames, frame_ticks; const deceptus_u8 *cells; deceptus_u16 required_flags, forbidden_flags; const deceptus_u16 *durations; deceptus_u8 plane; } gba_background_animation;',
                'extern const gba_background_animation gba_background_animations[];']
     header += ['typedef struct gba_mechanism_resource { deceptus_u32 offset; deceptus_u32 palette_offset; deceptus_u16 bytes; deceptus_u8 columns, rows, palette_first, palette_count; deceptus_u16 reserved; } gba_mechanism_resource;',
-               '#define GBA_LEVER_FIRST 0', '#define GBA_SPIKES_FIRST 33', '#define GBA_BLOCK_FIRST 73', '#define GBA_COLLAPSE_FIRST 105', '#define GBA_RAT_FIRST 257', '#define GBA_TRAP_FIRST 327', '#define GBA_MUZZLE_FIRST 331', '#define GBA_ARROW_FIRST 371', '#define GBA_SWIM_FIRST 387', '#define GBA_BLOB_FIRST 413',
+               '#define GBA_LEVER_FIRST 0', '#define GBA_SPIKES_FIRST 33', '#define GBA_BLOCK_FIRST 73', '#define GBA_COLLAPSE_FIRST 105', '#define GBA_RAT_FIRST 257', '#define GBA_TRAP_FIRST 327', '#define GBA_MUZZLE_FIRST 331', '#define GBA_ARROW_FIRST 371', '#define GBA_SWIM_FIRST 387', '#define GBA_BLOB_FIRST 413', '#define GBA_SPLASH_FIRST 474',
                f'#define GBA_MECHANISM_FRAME_COUNT {mechanism_frames}',
                '#define GBA_ACTOR_FRAME_BYTES 1536', f'#define GBA_ACTOR_FRAME_COUNT {ACTOR_FRAME_COUNT}', '#endif', '']
     (OUTPUT / 'data.s').write_text('\n'.join(assembly) + '\n')

@@ -22,10 +22,17 @@ def compile_tutorial(data):
     base['player_fall_gravity'] = 4
     base['import_water'] = True
     base['water_physics'] = [round(physics['player_speed_max_water']*48/60*16),round(-physics['player_in_water_linear_velocity_y_clamp_min']*48/60*16),round(physics['player_in_water_linear_velocity_y_clamp_max']*48/60*16),round(physics['player_in_water_time_to_allow_jump_button_ms']*60/1000),2,4]
+    splash=json.loads((data/'sprites/animations.json').read_text())['player_water_splash']
+    if splash['sprite_count']!=20:raise ValueError('water splash frame budget changed')
+    import math
+    elapsed=previous=0;base['water_splash_ticks']=[]
+    for duration in splash['frame_durations']:
+        elapsed+=duration;next_tick=math.ceil(elapsed*60/1000)
+        base['water_splash_ticks'].append(next_tick-previous);previous=next_tick
     base['player_speed'] = round(physics['player_speed_max_run'] * 48/60*16)
-    ids = [311,105,312,582,514,324,9,3,4,18,6,7]
-    names = ['THE CELL','LOWER CELLS','CROSSROADS','UPPER CELLS','THE CELLAR',"GUARDS' OFFICE",'MAIN HALL','ALTAR OF THE BLIND OWL','CLOCKWORK ANTECHAMBER','THE LOOP','THE SEWERS',"FOOL'S LEDGE"]
-    spawns = [[370,312],[100,336],[100,576],[720,288],[680,288],[100,288],[408,32],[128,408],[69,384],[46,264],[47,624],[46,360]]
+    ids = [311,105,312,582,514,324,9,3,4,18,6,7,11]
+    names = ['THE CELL','LOWER CELLS','CROSSROADS','UPPER CELLS','THE CELLAR',"GUARDS' OFFICE",'MAIN HALL','ALTAR OF THE BLIND OWL','CLOCKWORK ANTECHAMBER','THE LOOP','THE SEWERS',"FOOL'S LEDGE",'MINES ANTECHAMBER']
+    spawns = [[370,312],[100,336],[100,576],[720,288],[680,288],[100,288],[408,32],[128,408],[69,384],[46,264],[47,624],[46,360],[620,312]]
     stages = []
     for index, source_id in enumerate(ids):
         room = by_id[source_id]
@@ -49,8 +56,8 @@ def compile_tutorial(data):
         for name in ('level_solid_onesided','level_soild_onesided_dec','decoration-f2'):
             if name not in recipe['visual_layers']:
                 recipe['visual_layers'] = list(recipe['visual_layers']) + [name]
-        if index in (6,10):
-            recipe['tile_animations']=[dict(name='water_foam',layers=['water-foam'],plane=1)]
+        # source foam tiles are entry splashes, never an ambient looping layer.
+        recipe['visual_layers']=[name for name in recipe['visual_layers'] if name!='water-foam']
         if index == 7:
             recipe['tile_animations']=[dict(name='shrine_column',layers=['bg4'],source_bounds=[3000,2952,24,96])]
         if index == 8:
@@ -79,7 +86,7 @@ def compile_tutorial(data):
         [dict(id=18258,bounds_id=580,grant_item=2,set_flags=4,required_flags=1,forbidden_flags=4),
          dict(id=1433,bounds_id=1432,cost_item=1,set_flags=1,forbidden_flags=1),
          dict(id=1357,bounds_id=1432,forbidden_flags=1),dict(id=1433,bounds_id=1432,required_flags=1)],
-        [dict(id=1569,bounds_id=1569)],[],[],[dict(id=113)],[],[]
+        [dict(id=1569,bounds_id=945,automatic=60,effect=128,set_flags=64,forbidden_flags=64)],[],[],[dict(id=113)],[],[],[]
     ]
     report = []
     for room_index, actions in enumerate(interactions):
@@ -122,8 +129,8 @@ def compile_tutorial(data):
              (2,3,1,2136,2256),(3,2,2,2136,2256),(3,4,1,2136,2256),(4,3,2,2136,2256),
              (2,5,2,2064,2256),(5,2,1,2064,2256),(1,6,3,2016,2088),
              (6,7,2,3048,3168),(7,6,1,3048,3168),(7,8,2,3048,3168),(8,7,1,3048,3168),
-             (8,9,2,2880,3000),(9,8,1,2880,3000),(9,10,2,2880,3000),(10,9,1,2880,3000),(2,11,2,2496,2616),(11,2,1,2496,2616)]
-    arrival_ids = [528,527,521,522,515,516,588,587,517,518,None,525,526,531,532,533,534,535,536,520,519]
+             (8,9,2,2880,3000),(9,8,1,2880,3000),(9,10,2,2880,3000),(10,9,1,2880,3000),(2,11,2,2496,2616),(11,2,1,2496,2616),(6,12,1,3048,3168),(12,6,2,3048,3168)]
+    arrival_ids = [528,527,521,522,515,516,588,587,517,518,None,525,526,531,532,533,534,535,536,520,519,1677,1678]
     counts = []
     for index, source_id in enumerate(ids):
         origin = stages[index]['room_recipe']['crop_pixels']
@@ -154,7 +161,7 @@ def compile_tutorial(data):
     (output/'tutorial.json').write_text(json.dumps(dict(source_rooms=ids,interactions=report,portals=links,
         limitations=['crossroads lever toggles groups immediately; camera cutscene not ported',
                      'monk uses the source idle pose; appear/kneel cutscene not ported',
-                     'underwater swimming, unported enemy families and later game scripts remain unsupported']),indent=2)+'\n')
+                     'complete water/progression fidelity, unported enemy variants and later scripts remain unsupported']),indent=2)+'\n')
 
 
 if __name__ == '__main__':

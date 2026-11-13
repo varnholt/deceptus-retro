@@ -7,7 +7,8 @@ static void on_off_block_configure(const deceptus_mechanism_def *definition, dec
     state->frame = state->active ? 14 : 0;
 }
 
-static deceptus_u8 on_off_block_solid(const deceptus_mechanism_set *set, deceptus_u16 index, const deceptus_rect *bounds)
+static deceptus_u8 on_off_block_solid(const deceptus_mechanism_set *set, deceptus_u16 index,
+                                      const deceptus_rect *bounds)
 {
     deceptus_u8 enabled;
     enabled = set->states[index].enabled;

@@ -24,7 +24,7 @@ python tools/build_gba.py --scene tutorial --clang C:/build_utils/llvm/bin/clang
 ```
 
 Pass `--data D:/other/deceptus_engine/data` to select another source checkout.
-The tutorial build generates twelve rooms, UI resources, water clips and
+The tutorial build generates thirteen rooms, UI resources, water clips and
 native definitions before compiling the freestanding C engine and GBA backend.
 It produces `build/gba/deceptus-tutorial.gba`, the latest-build alias
 `deceptus.gba`, ELF symbols, a linker map and `build.json` with ROM size/hash.
