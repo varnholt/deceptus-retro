@@ -10,6 +10,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from assets import planar4
+from palettes import banked_background, palette_rgb555
 from tiled import collision_grid, draw_object, layer_values, transform_tile, FLIP_X, FLIP_DIAGONAL
 
 
@@ -72,8 +73,30 @@ class TileTests(unittest.TestCase):
                             value = sum(((tile[(bit // 2) * 16 + source_y * 2 + bit % 2]
                                           >> (7 - source_x)) & 1) << bit for bit in range(4))
                             if value:
-                                reconstructed.putpixel((left + pixel_x, top + pixel_y), value)
+                                reconstructed.putpixel((left + pixel_x, top + pixel_y), value + ((entry >> 10) & 7) * 16)
         self.assertEqual(reconstructed.tobytes(), expected.tobytes())
+        self.assertEqual(palette_rgb555(expected, 8), (folder / "room.pal").read_bytes())
+
+    def test_palette_banks_keep_separate_tile_colours(self):
+        image = Image.new("RGB", (16, 8), (248, 0, 0))
+        for top in range(8):
+            for left in range(8, 16):
+                image.putpixel((left, top), (0, 248, 0))
+        converted, banks, metrics = banked_background(image, bank_count=2, colours_per_bank=1)
+        self.assertNotEqual(banks[0], banks[1])
+        self.assertEqual(converted.size, image.size)
+        self.assertEqual(metrics["rgb555_mean_squared_error"], 0)
+        self.assertEqual(metrics["exact_rgb555_pixels_fraction"], 1)
+        for top in range(8):
+            for left in range(16):
+                self.assertEqual(converted.getpixel((left, top)) // 16, banks[left // 8])
+
+    def test_palette_assignment_is_deterministic(self):
+        image = Image.new("RGB", (8, 8), (24, 32, 48))
+        first, banks, _ = banked_background(image)
+        second, other_banks, _ = banked_background(image)
+        self.assertEqual(first.tobytes(), second.tobytes())
+        self.assertEqual(banks, other_banks)
 
     def test_csv_and_base64_are_equivalent(self):
         values = [1, 0, 0x80000002, 3]

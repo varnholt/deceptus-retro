@@ -164,6 +164,12 @@ def verify(core, rom):
         emulator.run(120)
         initial = emulator.debug()
         emulator.screenshot(ROOT / "artifacts/snes-boot.png")
+        # verify actual PPU tile attributes and all palette banks, not just files.
+        # with BG scroll Y=0, the SNES starts displaying map row 1.
+        reference = Image.open(ROOT / "assets/generated/room-preview.png").convert("RGB").crop((0, 21, 240, 151))
+        rendered = emulator.last_image.convert("RGB").crop((0, 20, 240, 150))
+        assert all(tuple(channel >> 3 for channel in expected) == tuple(channel >> 3 for channel in actual)
+                   for expected, actual in zip(reference.getdata(), rendered.getdata())), "PPU background differs from converted artwork"
         print("boot", initial, flush=True)
         emulator.run(30, [7])  # right
         moving = emulator.debug()

@@ -11,6 +11,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from tiled import TiledMap, collision_grid
+from palettes import banked_background, palette_rgb555
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "assets" / "source"
@@ -129,8 +130,9 @@ def compile_assets():
     font = ImageFont.load_default(size=10)
     draw.text((8, 1), "DECEPTUS  /  CATACOMBS", font=font, fill=(198, 175, 180))
     draw.text((280, 1), "B: JUMP   UP: ENTER   START: PAUSE", font=font, fill=(198, 175, 180))
-    room = indexed(room)
+    room, tile_banks, colour_metrics = banked_background(room)
     room.save(GENERATED / "room-preview.png")
+    (GENERATED / "colour-report.json").write_text(json.dumps(colour_metrics, indent=2) + "\n")
     tiles = [bytes(32)]
     lookup = {tiles[0]: 0}
     entries = []
@@ -145,7 +147,9 @@ def compile_assets():
                 lookup.setdefault(planar4(image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)), tile_index | 0x4000)
                 lookup.setdefault(planar4(image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)), tile_index | 0x8000)
                 lookup.setdefault(planar4(image.transpose(Image.Transpose.ROTATE_180)), tile_index | 0xC000)
-            entries.append(lookup[tile])
+            entry = lookup[tile]
+            bank = tile_banks[(top // 8) * (room.width // 8) + left // 8]
+            entries.append((entry & 0x3FFF, (entry & 0xC000) | (bank << 10)))
     # use a second Mode 1 plane for overflow: preserve every converted tile.
     # BG0: word $1000-$4fff; BG1: $5000-$5fff; OBJ: $6000-$7fff.
     if len(tiles) > 1279:
@@ -153,18 +157,18 @@ def compile_assets():
     (GENERATED / "room.pic").write_bytes(b"".join(tiles[:1024]))
     overflow = [bytes(32)] + tiles[1024:]
     (GENERATED / "overflow.pic").write_bytes(b"".join(overflow))
-    (GENERATED / "room.pal").write_bytes(palette_bytes(room))
+    (GENERATED / "room.pal").write_bytes(palette_rgb555(room, 8))
     # hardware 64x32 tilemaps are two consecutive 32x32 screens.
     hardware_map = [0] * 2048
     overflow_map = [0] * 2048
     for row in range(room.height // 8):
         for column in range(64):
             address = (column // 32) * 1024 + row * 32 + column % 32
-            entry = entries[row * 64 + column]
-            if (entry & 0x3FFF) < 1024:
-                hardware_map[address] = entry
+            pattern, attributes = entries[row * 64 + column]
+            if pattern < 1024:
+                hardware_map[address] = attributes | pattern
             else:
-                overflow_map[address] = (entry & 0xC000) | ((entry & 0x3FFF) - 1023)
+                overflow_map[address] = attributes | (pattern - 1023)
     (GENERATED / "room.map").write_bytes(struct.pack("<2048H", *hardware_map))
     (GENERATED / "overflow.map").write_bytes(struct.pack("<2048H", *overflow_map))
     actors = indexed(Image.open(SOURCE / "actors.png"), transparent=True)
@@ -177,6 +181,7 @@ def compile_assets():
     (GENERATED / "asset_sizes.h").write_text(
         f"#define ROOM_PATTERN_BYTES {min(len(tiles), 1024) * 32}\n"
         f"#define OVERFLOW_PATTERN_BYTES {len(overflow) * 32}\n"
+        "#define ROOM_PALETTE_BYTES 256\n"
         f"#define ACTOR_PATTERN_BYTES {len(actor_tiles) * 32}\n")
     recipe = json.loads((ROOT / "assets/rooms/catacombs.json").read_text())
     solid = collision_grid(Image.open(SOURCE / "collision.png"), recipe["collision_cell"], recipe["coverage_threshold"])
@@ -198,7 +203,8 @@ def compile_assets():
     report = {"background_tiles": len(tiles), "background_tile_limit": 1279,
               "background_vram_bytes": (len(tiles) + 1) * 32, "tilemap_vram_bytes": 8192,
               "object_vram_bytes": len(actor_tiles) * 32, "collision_rom_bytes": len(collision),
-              "background_palettes": 1, "object_palettes": 2, "max_logical_draws": 12,
+              "background_palettes": 8, "colour_fidelity": colour_metrics,
+              "object_palettes": 2, "max_logical_draws": 12,
               "objects_per_actor": 6, "worst_objects_on_scanline": 24,
               "sprite_scanline_limit": 32, "sprite_8px_slivers_per_scanline": 48,
               "sprite_8px_sliver_limit": 34,

@@ -131,10 +131,24 @@ coordinates in the JSON are relative to the crop, including records outside
 the crop so rotated geometry can be considered by later tools. Tile objects
 without an explicit collision shape are rejected by the vector rasterizer.
 
+The imported PNGs remain lossless at their original pixel size. SNES conversion
+then fits eight 15-colour background palettes to the room's 8x8 tiles. Each tile
+selects one palette through its tilemap attributes. The fitter uses actual
+source colours on the console's RGB555 grid; it does not dither, resize or blur.
+This replaces the first prototype's single 15-colour palette, which discarded
+much of the original shading and accent colours. It still cannot reproduce
+every original 24-bit colour exactly. See `assets/generated/colour-report.json`
+for measured colour error and exact RGB555 pixel coverage.
+
+A future GBA converter must start from the same lossless import and choose its
+own palette strategy. It must not read the already reduced SNES PNG. GBA colour
+and tile encoding belong to that backend; no GBA game build is implemented yet.
+
 SNES output includes 4bpp planar tiles, flip-deduplicated maps, 15-bit palettes,
 object sheets, C collision tables and `assets/generated/budget.json`. A native
 test decodes both hardware background maps and checks that they reconstruct
-the converted image exactly.
+the converted image exactly. The emulator route also compares a background
+region from the actual PPU output against the converted image on the RGB555 grid.
 
 ## Runtime and future console backends
 
@@ -168,9 +182,11 @@ There are no GBA/Mega Drive backend stubs and neither target is claimed working.
 ## Current SNES budget and limitations
 
 - 256x224 NTSC output, a 512px-wide room and horizontal camera following.
-- Two Mode 1 background planes preserve the converted image: 1,163 unique
-  patterns, plus one overflow blank, using 37,248 VRAM bytes and 8,192 map bytes.
-- The object sheet uses 15,360 VRAM bytes. Total allocated content is 60,800
+- Two Mode 1 background planes preserve the converted image: 1,192 unique
+  patterns, plus one overflow blank, using 38,176 VRAM bytes and 8,192 map bytes.
+- All eight background palette banks are used, with 83 distinct output RGB555
+  colours in the current room, compared with 15 in the initial prototype.
+- The object sheet uses 15,360 VRAM bytes. Total allocated content is 61,728
   bytes out of 65,536, with unused reserved gaps in the address layout.
 - Each logical actor uses up to six 16x16 objects. A conservative overlap
   budget drops excess draws before exceeding per-scanline object/sliver limits.

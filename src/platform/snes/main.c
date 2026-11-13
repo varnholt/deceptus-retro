@@ -49,9 +49,11 @@ static retro_u16 input_read(void)
 static void video_init(void)
 {
     setScreenOff();
-    bgInitTileSet(0, (u8 *)&room_patterns, (u8 *)&room_palette, 0, ROOM_PATTERN_BYTES, 32, BG_16COLORS, 0x1000);
+    bgInitTileSet(0, (u8 *)&room_patterns, (u8 *)&room_palette, 0, ROOM_PATTERN_BYTES, ROOM_PALETTE_BYTES, BG_16COLORS,
+                  0x1000);
     bgInitMapSet(0, (u8 *)&room_map, 4096, SC_64x32, 0x0000);
-    bgInitTileSet(1, (u8 *)&overflow_patterns, (u8 *)&room_palette, 0, OVERFLOW_PATTERN_BYTES, 32, BG_16COLORS, 0x5000);
+    bgInitTileSet(1, (u8 *)&overflow_patterns, (u8 *)&room_palette, 0, OVERFLOW_PATTERN_BYTES, ROOM_PALETTE_BYTES,
+                  BG_16COLORS, 0x5000);
     bgInitMapSet(1, (u8 *)&overflow_map, 4096, SC_64x32, 0x0800);
     oamInitGfxSet((u8 *)&actor_patterns, ACTOR_PATTERN_BYTES, (u8 *)&actor_palette, 64, 0, 0x6000, OBJ_SIZE16_L32);
     setMode(BG_MODE1, 0);
