@@ -37,15 +37,19 @@ currently renders video without audio output. Ordinary emulators can also open
 | --- | --- | --- |
 | Left / Right | D-pad | Move |
 | Z or Space | B or A | Jump; release early for a shorter jump |
-| Up | Up | Enter the gold portal |
+| Up | Up | Operate the lever (GBA); enter the gold portal (SNES) |
 | Enter | Start | Pause / resume |
 | R | Select | Restart the room |
 
-Walk right, jump onto the patrol actor to defeat it, then jump onto the raised
-platform and enter the gold portal. The prototype portal returns to the room's
-checkpoint. Walking through the original grandfather clock activates its
-imported checkpoint rectangle; subsequent returns use that position. Contact
-damage also returns there. State is held in RAM only. It does not load a second room.
+The GBA scene starts beside an original lever. Press **Up** to retract its
+linked spike traps, walk right, then jump onto the raised floor. With the traps
+extended, that route damages the player and returns to spawn. **R** restores
+the original lever and trap states. All 12 target links come from the main map.
+The mechanism sprites retain their original pixels; transitions are currently
+instant, with original animation timing still to port.
+
+The SNES scene retains the clock checkpoint, stand-in patrol and gold portal.
+State is held in RAM only; neither prototype loads a second room.
 
 ## Build from a fresh checkout
 
@@ -124,7 +128,7 @@ enters the portal. Screenshots and the state report are written to `artifacts/`.
 
 ## Data pipeline
 
-`assets/rooms/catacombs.json` selects a 512x224 crop from the original catacombs
+SNES recipe `assets/rooms/catacombs.json` selects a 512x224 crop from the original catacombs
 map and names the visual and collision layers. Player frames are looked up in
 the original `sprites/animations.json`; the texture is read from that checkout.
 The converter currently imports eight idle frames, eight run frames and two
@@ -164,15 +168,17 @@ much of the original shading and accent colours. It still cannot reproduce
 every original 24-bit colour exactly. See `assets/generated/colour-report.json`
 for measured colour error and exact RGB555 pixel coverage.
 
-The GBA converter starts from that same lossless import. It uses 16 background
-palette banks and 8bpp object frames, preserving all 48 opaque RGB555 actor
-colours in the current import. It does not read the reduced SNES PNG. Its
+The GBA converter independently imports a 768x224 mechanism area selected by
+`assets/rooms/gba-lever.json`, into `assets/source/gba/`. It uses 16 background
+palette banks and 8bpp object frames, preserving all 201 opaque RGB555 actor
+and mechanism colours in the current import. It does not read the reduced SNES PNG. Its
 graphics, maps, colour report and budget are in `assets/generated/gba/`.
 
 The content tools also export supported rectangle mechanisms from the original
-map. Checkpoints are active in the prototype; native fixtures test lever/block
-links, sensor edges, damage and dynamically enabled collision. Other crop objects
-are reported as unsupported in `assets/source/mechanisms.json`.
+map. GBA connects an original lever to 12 visible, damaging spike traps; SNES
+activates the clock checkpoint. Native fixtures also test lever/block links,
+sensor edges and dynamically enabled collision. Other crop objects are reported
+as unsupported in the respective lossless import’s `mechanisms.json`.
 
 SNES output includes 4bpp planar tiles, flip-deduplicated maps, 15-bit palettes,
 object sheets, C collision tables and `assets/generated/budget.json`. A native
@@ -227,7 +233,7 @@ implemented. Neither existing console build is the complete game yet.
   while moving or showing more actors. This is not a locked-60fps port.
 - No sound/music, save storage, second-room loading, real slope handling or combat
   weapons yet. A limited Lua callback compiler and rectangle mechanism importer
-  are implemented; complete enemy scripts, level logic and mechanism visuals remain.
+  are implemented; complete enemy scripts, level logic and remaining mechanism visuals/timing remain.
 - Verified in Snes9x and on the Windows native build; **not tested on hardware**.
 
 The next useful engine work is room/resource streaming, improved slopes,

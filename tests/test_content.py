@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from lua_source import ast, BooleanCompiler, CompileError
@@ -79,6 +80,17 @@ class LuaCompilerTests(unittest.TestCase):
 
 
 class ContentTests(unittest.TestCase):
+    def test_legacy_string_booleans_and_spikes(self):
+        obj = dict(id=1, name='trap', group='spike_blocks', x=8, y=8, width=24, height=24,
+                   rotation=0, shape='rectangle', properties={'enabled': 'false', 'inverted': 'false'})
+        with patch('content.map_objects', return_value=(None, [obj])):
+            definitions, targets, unsupported = crop_mechanisms(FIXTURES, {'map': 'unused', 'crop_pixels': [0, 0, 256, 224]})
+        self.assertEqual(definitions[0]['kind'], 'RETRO_MECH_SPIKES')
+        self.assertEqual(definitions[0]['enabled'], 0)
+        self.assertEqual(definitions[0]['flags'], 0)
+        self.assertEqual(definitions[0]['value'], 100)
+        self.assertEqual((targets, unsupported), ([], []))
+
     def test_typed_properties_and_group_offsets_survive_import(self):
         _, objects = map_objects(FIXTURES / "typed.tmx")
         self.assertEqual((objects[0]["x"], objects[0]["y"]), (40, 40))

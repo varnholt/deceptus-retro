@@ -26,7 +26,7 @@ copies of the game. Unused script files are not mistaken for placed enemies.
 | Original system | Port implementation | Current state |
 | --- | --- | --- |
 | Tiled placements/properties | Build-time object catalog and compact C definitions | Full catalog; supported objects in the prototype crop are imported |
-| C++ mechanisms | Reusable C components with source ids and event queues | Rectangle checkpoints, sensors, levers, blocks and damage logic |
+| C++ mechanisms | Reusable C components with source ids and event queues | Rectangle checkpoints, sensors, levers, blocks and damage; GBA lever/spike chain playable |
 | Lua mechanism callbacks | Parse source, resolve selectors, compile bounded action programs | Two original callbacks verified; complete scripts unsupported |
 | Lua enemies | Source-derived behavior programs plus native movement/animation/weapon services | Inventory only; all 16 placed types remain to port |
 | Box2D | Fixed-point character/world collision and specific analytical mechanisms | Grid collision and dynamic rectangle blocks; slopes/joints/water incomplete |
@@ -119,8 +119,11 @@ in `assets/source/mechanisms.json`.
    on the actual target. Emulator success alone does not establish hardware
    performance or complete original-physics fidelity.
 
-The room/resource work is the next dependency: the current 512x224 crop cannot
-demonstrate the level-wide mechanism, enemy and progression chains.
+GBA now demonstrates original lever 113 and its 12 spike-block targets in a
+768x224 area, with source sprites, safe/lethal traversal and restart. Its
+256px background paging is limited to this area. Transition animations and
+full level Lua dispatch are unfinished; whole-room resource loading remains
+the dependency for level-wide enemy and progression chains.
 
 ## Commands and truthful build status
 

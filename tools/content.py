@@ -162,7 +162,7 @@ def crop_mechanisms(data, recipe):
     left, top, width, height = recipe["crop_pixels"]
     supported = {"checkpoints": "RETRO_MECH_CHECKPOINT", "sensor_rects": "RETRO_MECH_SENSOR",
                  "levers": "RETRO_MECH_LEVER", "blocking_rects": "RETRO_MECH_BLOCK",
-                 "on_off_blocks": "RETRO_MECH_BLOCK", "damage_rects": "RETRO_MECH_DAMAGE"}
+                 "on_off_blocks": "RETRO_MECH_BLOCK", "spike_blocks": "RETRO_MECH_SPIKES", "damage_rects": "RETRO_MECH_DAMAGE"}
     selected, unsupported = [], []
     for obj in objects:
         if obj["x"] >= left + width or obj["y"] >= top + height or obj["x"] + max(1, obj["width"]) <= left or obj["y"] + max(1, obj["height"]) <= top:
@@ -196,12 +196,13 @@ def crop_mechanisms(data, recipe):
                 raise ValueError(f'mechanism {obj["id"]}: target {name!r} is missing or outside the supported crop')
             targets.extend(target["id"] for target in matches)
         bounds = [round(obj["x"] - left), round(obj["y"] - top), round(obj["width"]), round(obj["height"])]
-        flags = int(bool(props.get("inverted", False))) | (0 if props.get("handle_available", True) else 2)
-        value = int(props.get("damage", 100)) if obj["group"] == "damage_rects" else int(props.get("index", 0))
+        boolean = lambda value: str(value).lower() in ("true", "1")
+        flags = int(boolean(props.get("inverted", False))) | (0 if boolean(props.get("handle_available", True)) else 2)
+        value = int(props.get("damage", 100)) if obj["group"] in ("damage_rects", "spike_blocks") else int(props.get("index", 0))
         if not 0 <= value <= 65535:
             raise ValueError(f'mechanism {obj["id"]}: value {value} exceeds the supported unsigned 16-bit range')
         definitions.append({"source_id": obj["id"], "name": obj["name"], "kind": supported[obj["group"]],
-                            "bounds": bounds, "enabled": int(props.get("enabled", True)), "flags": flags,
+                            "bounds": bounds, "enabled": int(boolean(props.get("enabled", True))), "flags": flags,
                             "value": value, "target_first": first, "target_count": len(targets) - first,
                             "visual_status": "static background" if obj["group"] == "checkpoints" else "not implemented"})
     return definitions, targets, unsupported

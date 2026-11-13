@@ -1,7 +1,7 @@
 # GBA backend
 
 GBA is the first complete-game target. The current ROM runs the existing
-one-room prototype through the shared C engine. Room streaming, original enemy
+mechanism scene through the shared C engine. Room streaming, original enemy
 types, full level scripts, progression and audio remain in the full-game work
 listed in `PORTING.md`.
 
@@ -20,7 +20,7 @@ python tools/play.py
 
 The current workspace already has these tools and a built
 `build/gba/deceptus.gba`. `build/gba/deceptus.elf` retains symbols for debugging.
-The output is a 128KiB ROM with a valid header, checksum and ARM entry point.
+The output is a 512KiB ROM with a valid header, checksum and ARM entry point.
 The size can grow automatically up to the 32MiB cartridge address limit.
 
 Use `--data PATH` for a different main-engine checkout. `--clang`, `--linker`
@@ -47,19 +47,20 @@ game artwork is committed to this repository.
 pixel positions and sprite dimensions stay at 1:1; no dithering is enabled.
 
 - Backgrounds use 16 palettes of 15 opaque colours, selected per 8x8 tile.
-- The current background has 1,191 unique 4bpp patterns and 112 distinct RGB555
-  colours. The fitter preserves about 92.8% of source pixels exactly on that
-  colour grid; the remaining colour error is recorded in `budget.json`.
-- Actors use an 8bpp object palette. All 48 opaque RGB555 actor colours in the
-  current import are kept without palette reduction. The green patrol variant
-  is a deliberate prototype tint, not an original enemy asset.
+- The current 768x224 background uses 1,621 unique 4bpp patterns. Its measured
+  palette error is recorded in `budget.json`; about 96.7% of pixels retain their
+  exact source RGB555 colour.
+- Actors and mechanisms share an 8bpp object palette. All 201 opaque RGB555
+  colours are kept without palette reduction. This scene has no stand-in patrol
+  or gold portal.
 - Each 32x48 logical frame becomes six 16x16 objects. Visible frames are copied
   to object VRAM when their animation/palette changes. The 12-draw capacity
   uses at most 18,432 bytes of object VRAM.
 
 Generated output stays in `assets/generated/gba/`, separate from SNES output.
 `tools/world_export.py` supplies both targets with the same collision and
-mechanism definitions. The underlying 512x224 source crop is unchanged.
+mechanism definitions. GBA uses `assets/rooms/gba-lever.json` and imports into
+`assets/source/gba/`; SNES retains its clock-room recipe.
 
 ## Hardware layout
 
@@ -69,9 +70,10 @@ mechanism definitions. The underlying 512x224 source crop is unchanged.
 | BG VRAM `0x06008000` | Overflow patterns in character block 2 |
 | BG VRAM `0x0600e000` | Primary 64x32 map in screen blocks 28–29 |
 | BG VRAM `0x0600f000` | Overflow 64x32 map in screen blocks 30–31 |
-| OBJ VRAM `0x06010000` | Per-visible-actor 8bpp frame slots |
+| OBJ VRAM `0x06010000` | 18,432 bytes reserved for actor frame slots |
+| OBJ VRAM `0x06014800` | 13,312 bytes of original mechanism endpoint sprites |
 | Palette RAM `0x05000000` | 256 background entries |
-| Palette RAM `0x05000200` | Original actor colours plus patrol tint |
+| Palette RAM `0x05000200` | Original actor and mechanism colours |
 
 The display uses mode 0, two background planes and 1D object mapping. Graphics
 and OAM updates happen during VBlank through DMA3. Startup code sets system/IRQ
@@ -85,10 +87,21 @@ prototype retains its 256x224 view and its existing appearance.
 
 ## Verified scope and limits
 
-The mGBA route checks background pixels against the generated RGB555 image,
-movement, jump/landing, pause/resume, restart, both camera axes, the demo patrol,
-the raised ledge, original checkpoint activation and portal return. It also
-checks that simulation ticks keep pace with display frames on this scene.
+The default scene imports original lever `lever_spike_06` (object 113) and its
+12 named spike-block targets from the catacombs map. Start beside the lever.
+Press **Up** to retract or extend the traps. Walk right, then jump onto the
+raised floor; the same route is safe with traps retracted and lethal with them
+extended. **R** restores the source states. Holding Up toggles only once.
+
+The original links drive C mechanism states directly; this chain does not need
+Lua. The full level Lua event dispatch is still not connected. Lever and trap
+sprites show original endpoint frames immediately; the original transition
+animation, timing and enabled-lever idle animation remain to port.
+
+The background is paged in 256px screen blocks as the camera moves across this
+768px area; it does not load neighbouring rooms. The mGBA route verifies source
+links, all 13 enabled states, input edges, lethal versus safe traversal,
+restart/pause, and background pixels before and after a page boundary.
 Reports and screenshots are in `artifacts/gba-*`.
 
 Native tests reconstruct the complete GBA background from packed tiles, flips,

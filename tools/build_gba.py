@@ -35,7 +35,8 @@ def fix_header(rom, reference):
     payload[0xb3:0xbd] = bytes(10)
     payload[0xbd] = (-sum(payload[0xa0:0xbd]) - 0x19) & 255
     payload[0xbe:0xc0] = b'\0\0'
-    size = 1 << max(15, (len(payload) - 1).bit_length())
+    # 256KiB cartridges are misidentified as multiboot images by the current mGBA core.
+    size = 1 << max(19, (len(payload) - 1).bit_length())
     payload.extend(b'\xff' * (size - len(payload)))
     rom.write_bytes(payload)
 

@@ -23,7 +23,7 @@ class GbaGraphicsTests(unittest.TestCase):
         if not (GENERATED / 'room-preview.png').exists():
             self.skipTest('build the GBA assets to check their hardware maps')
         expected = Image.open(GENERATED / 'room-preview.png')
-        maps = [struct.unpack('<2048H', (GENERATED / f'map{plane}.bin').read_bytes()) for plane in range(2)]
+        maps = [struct.unpack(f'<{(GENERATED / f"map{plane}.bin").stat().st_size // 2}H', (GENERATED / f'map{plane}.bin').read_bytes()) for plane in range(2)]
         patterns = [(GENERATED / f'background{plane}.bin').read_bytes() for plane in range(2)]
         reconstructed = Image.new('P', expected.size)
         for top in range(0, expected.height, 8):
@@ -48,7 +48,7 @@ class GbaGraphicsTests(unittest.TestCase):
     def test_actor_frames_preserve_all_original_rgb555_pixels(self):
         if not (GENERATED / 'actors.bin').exists():
             self.skipTest('build GBA assets to verify its actor frames')
-        original = Image.open(ROOT / 'assets/source/actors.png').convert('RGBA')
+        original = Image.open(ROOT / 'assets/source/gba/actors.png').convert('RGBA')
         frames = (GENERATED / 'actors.bin').read_bytes()
         palette = struct.unpack('<256H', (GENERATED / 'actors.pal').read_bytes())
         for frame in range(19):
@@ -77,6 +77,39 @@ class GbaGraphicsTests(unittest.TestCase):
         self.assertEqual((sum(payload[0xa0:0xbe]) + 0x19) & 255, 0)
         self.assertEqual(len(payload) & (len(payload) - 1), 0)
         self.assertEqual(payload[0xac:0xb0], b'DCPT')
+    def test_mechanism_frames_preserve_source_pixels(self):
+        source = ROOT.parent / 'deceptus_engine/data/sprites'
+        if not (source / 'levers.png').exists() or not (GENERATED / 'mechanisms.bin').exists():
+            self.skipTest('original assets and a GBA build are required')
+        lever = Image.open(source / 'levers.png').convert('RGBA')
+        block = Image.open(source / 'on_off_block.png').convert('RGBA')
+        spikes = Image.open(source / 'enemy_spikeblock.png').convert('RGBA')
+        images = [lever.crop((0, 0, 72, 72)), lever.crop((0, 144, 72, 216)),
+                  block.crop((0, 24, 24, 48)), spikes.crop((168, 96, 192, 120)),
+                  spikes.crop((0, 96, 24, 120))]
+        palette = struct.unpack('<256H', (GENERATED / 'actors.pal').read_bytes())
+        graphics = (GENERATED / 'mechanisms.bin').read_bytes()
+        offset = 0
+        for image in images:
+            padded = Image.new('RGBA', (80, 64) if image.width == 72 else (32, 32))
+            padded.alpha_composite(image)
+            for top in range(0, padded.height, 16):
+                for left in range(0, padded.width, 16):
+                    for tile_y in range(2):
+                        for tile_x in range(2):
+                            for y in range(8):
+                                for x in range(8):
+                                    red, green, blue, alpha = padded.getpixel((left + tile_x * 8 + x, top + tile_y * 8 + y))
+                                    index = graphics[offset]
+                                    offset += 1
+                                    if alpha >= 128:
+                                        self.assertNotEqual(index, 0)
+                                        self.assertEqual(palette[index], (red >> 3) | ((green >> 3) << 5) | ((blue >> 3) << 10))
+                                    else:
+                                        self.assertEqual(index, 0)
+        self.assertEqual(offset, len(graphics))
+        self.assertLessEqual(offset + 12 * 1536, 32768)
+
 
 
 if __name__ == '__main__':

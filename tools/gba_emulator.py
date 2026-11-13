@@ -1,8 +1,9 @@
-"""Verify the real GBA ROM through mGBA, including pixels and gameplay inputs."""
+"""Verify the real GBA mechanism scene through mGBA."""
 
 import argparse
 import json
 from pathlib import Path
+import struct
 
 from PIL import Image
 
@@ -12,60 +13,68 @@ from emulator import Emulator, ROOT
 def verify(core, rom):
     emulator = Emulator(core, rom, {'mgba_use_bios': 'OFF', 'mgba_frameskip': '0'})
     state = lambda: emulator.debug(camera_y=True)
+    def mechanisms():
+        memory = emulator.memory()
+        values = struct.unpack_from('<23H', memory, memory.find(b'\xce\xd3'))
+        return dict(count=values[18], lever=values[19], enabled_mask=values[20], overflow=values[21])
+    def check_background():
+        current = state()
+        x, y = current['camera_x'], current['camera_y']
+        expected = Image.open(ROOT / 'assets/generated/gba/room-preview.png').convert('RGB')
+        expected = expected.crop((x, y, x + 240, y + 16))
+        actual = emulator.last_image.convert('RGB').crop((0, 0, 240, 16))
+        assert all(tuple(channel >> 3 for channel in first) == tuple(channel >> 3 for channel in second)
+                   for first, second in zip(expected.getdata(), actual.getdata())), 'streamed GBA background differs from converted artwork'
     try:
         emulator.run(120)
         initial = state()
-        assert not initial['content_error'] and initial['grounded'], 'GBA game failed to initialize'
-        assert emulator.last_image.size == (240, 160), 'unexpected GBA video dimensions'
-        assert initial['camera_y'] == 64, 'vertical camera failed to show the floor'
-        expected = Image.open(ROOT / 'assets/generated/gba/room-preview.png').convert('RGB')
-        expected = expected.crop((0, 64, 240, 160))
-        actual = emulator.last_image.convert('RGB').crop((0, 0, 240, 96))
-        assert all(tuple(channel >> 3 for channel in first) == tuple(channel >> 3 for channel in second)
-                   for first, second in zip(expected.getdata(), actual.getdata())), 'GBA pixels differ from converted artwork'
-        emulator.screenshot(ROOT / 'artifacts/gba-boot.png')
-        emulator.run(30, [7])
+        assert not initial['content_error'] and initial['grounded'], 'GBA scene failed to initialize'
+        assert emulator.last_image.size == (240, 160)
+        assert mechanisms() == dict(count=13, lever=1, enabled_mask=8191, overflow=0)
+        check_background()
+        emulator.screenshot(ROOT / 'artifacts/gba-lever-on.png')
+        emulator.run(1, [4])
+        assert mechanisms()['lever'] == 0 and mechanisms()['enabled_mask'] == 0, 'original lever targets did not switch off'
+        emulator.run(20, [4])
+        assert mechanisms()['lever'] == 0, 'held Up repeatedly toggled the lever'
+        emulator.screenshot(ROOT / 'artifacts/gba-lever-off.png')
+        emulator.run(1)
+        emulator.run(1, [4])
+        assert mechanisms()['lever'] == 1 and mechanisms()['enabled_mask'] == 8191, 'lever did not switch back on'
+        emulator.run(1)
+        emulator.run(1, [4])
+        emulator.run(60, [7])
         walking = state()
-        assert walking['x'] > initial['x'] + 40, 'GBA right input did not move the player'
-        assert 29 <= walking['ticks'] - initial['ticks'] <= 31, 'GBA simulation missed display ticks'
-        emulator.run(10, [0])
-        jumping = state()
-        assert jumping['y'] < walking['y'] - 8, 'GBA jump did not rise'
-        emulator.screenshot(ROOT / 'artifacts/gba-jump.png')
-        emulator.run(60)
-        assert state()['grounded'], 'GBA player failed to land'
-        emulator.run(8, [3])
-        paused = state()
-        emulator.run(30, [7])
-        assert paused['paused'] and state()['ticks'] == paused['ticks'], 'GBA pause failed'
-        emulator.run(8, [3])
+        assert walking['x'] == 400 and walking['camera_x'] > 256, 'walk or background page boundary failed'
+        check_background()
+        emulator.run(45, [7, 0])
         emulator.run(10)
-        assert not state()['paused'] and state()['ticks'] > paused['ticks'], 'GBA resume failed'
-        emulator.run(8, [2])
+        safe = state()
+        assert safe['x'] >= 480 and safe['y'] == 168 and safe['grounded'], 'retracted traps did not permit passage'
+        assert not safe['content_error'] and not mechanisms()['overflow']
+        check_background()
+        emulator.screenshot(ROOT / 'artifacts/gba-traps-safe.png')
+        emulator.run(1, [3])
+        paused = state()
+        emulator.run(15, [6])
+        assert paused['paused'] and state()['ticks'] == paused['ticks']
+        emulator.run(1, [3])
+        emulator.run(1)
+        assert not state()['paused']
+        emulator.run(1, [2])
         emulator.run(5)
-        assert state()['x'] == initial['x'], 'GBA restart failed'
-        emulator.core.retro_reset()
-        emulator.run(120)
-        emulator.run(86, [7])
-        emulator.run(50, [7, 0])
-        assert not state()['patrol_active'], 'GBA route did not defeat the demo patrol'
-        emulator.run(48, [7])
-        emulator.run(30, [7, 0])
-        emulator.run(15, [7])
-        ledge = state()
-        assert ledge['x'] > 440 and ledge['y'] == 168 and ledge['grounded'], 'GBA raised platform is unreachable'
-        assert ledge['camera_x'] > 0 and ledge['camera_y'] == 48, 'GBA camera did not follow the ledge route'
-        emulator.screenshot(ROOT / 'artifacts/gba-portal.png')
-        emulator.run(12, [4])
-        door = state()
-        assert door['checkpoint_id'] == 1058, 'original checkpoint did not activate on GBA'
-        assert door['door_entries'] == 1 and door['x'] == door['checkpoint_x'], 'GBA portal did not return to checkpoint'
-        report = {'core': emulator.version, 'boot': initial, 'walk': walking, 'jump': jumping,
-                  'ledge': ledge, 'door': door, 'video_frames': emulator.video_frames,
+        assert state()['x'] == initial['x'] and mechanisms()['lever'] == 1 and mechanisms()['enabled_mask'] == 8191
+        emulator.run(60, [7])
+        emulator.run(45, [7, 0])
+        dangerous = state()
+        assert dangerous['x'] < 350 and dangerous['y'] == initial['y'], 'extended original traps did not damage and respawn the player'
+        emulator.screenshot(ROOT / 'artifacts/gba-traps-respawn.png')
+        report = {'core': emulator.version, 'boot': initial, 'walk': walking, 'safe_route': safe,
+                  'dangerous_route': dangerous, 'mechanisms': mechanisms(), 'video_frames': emulator.video_frames,
                   'background_rgb555_verified': True, 'full_game': False}
         (ROOT / 'artifacts/gba-emulator-report.json').write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps(report, indent=2))
-        print('GBA emulator integration checks passed')
+        print('GBA original lever and trap integration checks passed')
     finally:
         emulator.close()
 

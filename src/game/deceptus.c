@@ -48,8 +48,12 @@ void retro_init(retro_engine *engine, const retro_room *room, const retro_video_
     engine->content_error = !retro_mechanisms_init(&engine->mechanisms, room->mechanisms, room->mechanism_count,
                                                    room->mechanism_targets, room->mechanism_target_count);
     retro_spawn(engine, RETRO_PLAYER, room->spawn_x, room->spawn_y);
-    retro_spawn(engine, RETRO_PATROL, room->patrol_x, room->patrol_y);
-    retro_spawn(engine, RETRO_DOOR, room->door_x, room->door_y);
+    if (room->patrol_x >= 0) {
+        retro_spawn(engine, RETRO_PATROL, room->patrol_x, room->patrol_y);
+    }
+    if (room->door_x >= 0) {
+        retro_spawn(engine, RETRO_DOOR, room->door_x, room->door_y);
+    }
 }
 
 static retro_fixed approach(retro_fixed value, retro_fixed target, retro_i16 amount)

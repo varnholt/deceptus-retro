@@ -20,21 +20,21 @@ SOURCE = ROOT / "assets" / "source"
 GENERATED = ROOT / "assets" / "generated"
 
 
-def import_deceptus(data):
+def import_deceptus(data, recipe_path=None, source=SOURCE):
     data = Path(data)
-    SOURCE.mkdir(parents=True, exist_ok=True)
-    recipe = json.loads((ROOT / "assets/rooms/catacombs.json").read_text())
+    source.mkdir(parents=True, exist_ok=True)
+    recipe = json.loads((recipe_path or ROOT / "assets/rooms/catacombs.json").read_text())
     tiled = TiledMap(data / recipe["map"])
     crop = recipe["crop_pixels"]
     names = recipe["visual_layers"]
     room = Image.new("RGBA", crop[2:], (10, 10, 20, 255))
     room.alpha_composite(tiled.render(crop, names))
-    room.convert("RGB").save(SOURCE / "catacombs.png")
+    room.convert("RGB").save(source / "catacombs.png")
     # tile collision vectors, not artwork alpha; dynamic blockers stay dynamic.
     collision = tiled.render(crop, recipe["collision_layers"], collision=True)
     one_way = tiled.render(crop, recipe["one_way_layers"], collision=True)
-    collision.save(SOURCE / "collision.png")
-    one_way.save(SOURCE / "one_way.png")
+    collision.save(source / "collision.png")
+    one_way.save(source / "one_way.png")
     animations = json.loads((data / "sprites" / "animations.json").read_text())
     original = Image.open(data / "sprites" / "player.png").convert("RGBA")
     sheet = Image.new("RGBA", (128, 240))
@@ -57,9 +57,9 @@ def import_deceptus(data):
     draw.line((8, 45, 8, 16, 12, 8, 20, 8, 24, 16, 24, 45), fill=(120, 62, 100), width=2)
     draw.rectangle((20, 28, 22, 30), fill=(235, 190, 120))
     sheet.alpha_composite(portal, (64, 192))
-    sheet.save(SOURCE / "actors.png")
+    sheet.save(source / "actors.png")
     definitions, targets, unsupported = crop_mechanisms(data, recipe)
-    (SOURCE / "mechanisms.json").write_text(json.dumps({"definitions": definitions, "targets": targets,
+    (source / "mechanisms.json").write_text(json.dumps({"definitions": definitions, "targets": targets,
         "unsupported_objects": unsupported, "source_map": recipe["map"]}, indent=2) + "\n")
     manifest = {
         "source_map": "deceptus_engine/data/level-catacombs/catacombs.tmx",
@@ -70,11 +70,11 @@ def import_deceptus(data):
         "collision_cell": 8,
         "coverage_threshold": 0.5,
         "limitations": ["slopes become 8px steps", "layer effects and parallax are flattened",
-                        "only the selected crop is imported", "dynamic mechanisms are not imported"],
+                        "only the selected crop is imported", "mechanism visuals and behavior depend on the target adapter"],
         "frames": [{"animation": name, "source_frame": index} for name, index in selections],
         "artwork_owner": "dstar",
     }
-    (SOURCE / "import.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (source / "import.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
 
 def indexed(image, transparent=False):

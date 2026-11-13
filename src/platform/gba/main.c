@@ -24,7 +24,8 @@ static retro_frame frame;
 static retro_video_caps video = {240, 160, RETRO_DRAW_CAPACITY};
 static gba_object objects[128] __attribute__((aligned(4)));
 static retro_u16 uploaded_frame[RETRO_DRAW_CAPACITY];
-volatile retro_u16 retro_debug[18];
+volatile retro_u16 retro_debug[23];
+static retro_u16 map_chunk = 65535;
 
 static void dma_copy(const void *source, void *destination, retro_u32 bytes)
 {
@@ -74,8 +75,7 @@ static void video_init(void)
     REG_DISPLAY = 1 << 7;
     dma_copy(gba_background0, (void *)0x06000000, GBA_BACKGROUND0_BYTES);
     dma_copy(gba_background1, (void *)0x06008000, GBA_BACKGROUND1_BYTES);
-    dma_copy(gba_map0, (void *)0x0600e000, GBA_MAP0_BYTES);
-    dma_copy(gba_map1, (void *)0x0600f000, GBA_MAP1_BYTES);
+    dma_copy(gba_mechanism_frames, (void *)0x06014800, GBA_MECHANISM_FRAMES_BYTES);
     dma_copy(gba_background_palette, (void *)0x05000000, GBA_BACKGROUND_PALETTE_BYTES);
     dma_copy(gba_actor_palette, (void *)0x05000200, GBA_ACTOR_PALETTE_BYTES);
     /* two 512x256 4bpp planes, with independent character blocks. */
@@ -96,6 +96,57 @@ static void video_init(void)
     REG16(0x04000014) = 0;
     REG16(0x04000016) = 0;
     REG_DISPLAY = (1 << 6) | (1 << 8) | (1 << 9) | (1 << 12);
+}
+
+static void mechanism_objects(retro_u16 *count)
+{
+    retro_u16 index, piece, pieces, offset;
+    retro_i16 x, y;
+    retro_u8 enabled;
+    const retro_mechanism_def *definition;
+    const retro_mechanism_state *state;
+    gba_object *object;
+    for (index = 0; index < engine.mechanisms.count; ++index) {
+        definition = &engine.mechanisms.definitions[index];
+        state = &engine.mechanisms.states[index];
+        if (!state->visible) {
+            continue;
+        }
+        enabled = state->enabled;
+        if (definition->kind == RETRO_MECH_LEVER) {
+            pieces = 20;
+            offset = enabled ? 160 : 0;
+        } else if (definition->kind == RETRO_MECH_BLOCK) {
+            if (definition->flags & RETRO_MECH_INVERTED) {
+                enabled = !enabled;
+            }
+            if (!enabled) {
+                continue;
+            }
+            pieces = 4;
+            offset = 320;
+        } else if (definition->kind == RETRO_MECH_SPIKES) {
+            pieces = 4;
+            offset = enabled ? 384 : 352;
+        } else {
+            continue;
+        }
+        for (piece = 0; piece < pieces; ++piece) {
+            x = definition->bounds.x - frame.camera_x + (pieces == 20 ? piece % 5 : piece % 2) * 16;
+            y = definition->bounds.y - frame.camera_y + (pieces == 20 ? piece / 5 : piece / 2) * 16;
+            if (x <= -16 || x >= 240 || y <= -16 || y >= 160) {
+                continue;
+            }
+            if (*count >= 128) {
+                engine.content_error = 1;
+                return;
+            }
+            object = &objects[(*count)++];
+            object->attribute0 = ((retro_u16)y & 255) | (1 << 13);
+            object->attribute1 = ((retro_u16)x & 511) | (1 << 14);
+            object->attribute2 = 576 + offset + piece * 8;
+        }
+    }
 }
 
 static void video_prepare(void)
@@ -126,6 +177,27 @@ static void video_prepare(void)
             object->attribute2 = index * 48 + piece * 8;
         }
     }
+    mechanism_objects(&count);
+}
+
+static void maps_commit(void)
+{
+    retro_u16 chunk, next, chunks;
+    chunk = frame.camera_x >> 8;
+    if (chunk == map_chunk) {
+        return;
+    }
+    chunks = GBA_MAP0_BYTES / 2048;
+    next = chunk + 1;
+    if (next >= chunks) {
+        next = 0;
+    }
+    /* screen blocks alternate as the camera crosses each 256px boundary. */
+    dma_copy(gba_map0 + chunk * 2048, (void *)(0x0600e000 + (chunk & 1) * 2048), 2048);
+    dma_copy(gba_map1 + chunk * 2048, (void *)(0x0600f000 + (chunk & 1) * 2048), 2048);
+    dma_copy(gba_map0 + next * 2048, (void *)(0x0600e000 + ((chunk + 1) & 1) * 2048), 2048);
+    dma_copy(gba_map1 + next * 2048, (void *)(0x0600f000 + ((chunk + 1) & 1) * 2048), 2048);
+    map_chunk = chunk;
 }
 
 static void video_commit(void)
@@ -144,10 +216,11 @@ static void video_commit(void)
             uploaded_frame[index] = resource;
         }
     }
+    maps_commit();
     dma_copy(objects, (void *)0x07000000, sizeof(objects));
-    REG16(0x04000010) = frame.camera_x;
+    REG16(0x04000010) = frame.camera_x & 511;
     REG16(0x04000012) = frame.camera_y;
-    REG16(0x04000014) = frame.camera_x;
+    REG16(0x04000014) = frame.camera_x & 511;
     REG16(0x04000016) = frame.camera_y;
     REG16(0x04000050) = engine.paused ? (3 << 6) | 0x13 : 0;
     REG16(0x04000054) = engine.paused ? 8 : 0;
@@ -173,6 +246,23 @@ static void debug_write(void)
     retro_debug[15] = engine.content_error;
     retro_debug[16] = engine.camera_y;
     retro_debug[17] = REG_SCANLINE;
+    retro_debug[18] = engine.mechanisms.count;
+    {
+        retro_u16 index, mask;
+        mask = 0;
+        retro_debug[19] = 65535;
+        for (index = 0; index < engine.mechanisms.count; ++index) {
+            if (engine.mechanisms.definitions[index].kind == RETRO_MECH_LEVER) {
+                retro_debug[19] = engine.mechanisms.states[index].enabled;
+            }
+            if (index < 16 && engine.mechanisms.states[index].enabled) {
+                mask |= (retro_u16)(1U << index);
+            }
+        }
+        retro_debug[20] = mask;
+        retro_debug[21] = engine.mechanisms.overflow;
+        retro_debug[22] = engine.hurt_ticks;
+    }
 }
 
 int main(void)
@@ -183,6 +273,7 @@ int main(void)
         retro_tick(&engine, input_read());
         retro_render(&engine, &frame);
         video_prepare();
+
         debug_write();
         wait_vblank();
         video_commit();

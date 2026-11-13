@@ -112,7 +112,7 @@ void retro_mechanisms_tick(retro_mechanism_set *set, const retro_rect *player, r
                 emit(set, definition->source_id, RETRO_MECH_REACHED, 1);
             } else if (definition->kind == RETRO_MECH_SENSOR && inside != state->inside) {
                 emit(set, definition->source_id, inside ? RETRO_MECH_ENTER : RETRO_MECH_LEAVE, inside);
-            } else if (definition->kind == RETRO_MECH_DAMAGE && inside) {
+            } else if ((definition->kind == RETRO_MECH_DAMAGE || definition->kind == RETRO_MECH_SPIKES) && inside) {
                 emit(set, definition->source_id, RETRO_MECH_HIT, definition->value);
             }
         }

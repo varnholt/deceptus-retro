@@ -114,6 +114,19 @@ int main(void)
     CHECK(engine.health == 2 && retro_floor(engine.entities[0].x) == 136);
     CHECK(!retro_mechanisms_init(&mechanisms, definitions, RETRO_MECHANISM_CAPACITY + 1, targets, 1));
     CHECK(mechanisms.count == 0);
+    {
+        static const retro_mechanism_def trap[] = {{90, {80, 160, 24, 24}, 0, 0, 100, RETRO_MECH_SPIKES, 1, 0}};
+        CHECK(retro_mechanisms_init(&mechanisms, trap, 1, 0, 0));
+        player.x = 80;
+        player.y = 160;
+        retro_mechanisms_tick(&mechanisms, &player, 0);
+        CHECK(mechanisms.event_count == 1 && mechanisms.events[0].kind == RETRO_MECH_HIT);
+        CHECK(mechanisms.events[0].value == 100);
+        CHECK(!retro_mechanism_solid(&mechanisms, &player));
+        retro_mechanism_enable(&mechanisms, 90, 0);
+        retro_mechanisms_tick(&mechanisms, &player, 0);
+        CHECK(mechanisms.event_count == 0);
+    }
     puts("mechanism, dynamic collision, checkpoint and bounded logic checks passed");
     return 0;
 }

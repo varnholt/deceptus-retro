@@ -42,6 +42,7 @@ typedef struct retro_room {
     retro_u16 rows;
     retro_i16 spawn_x;
     retro_i16 spawn_y;
+    /* negative x omits the prototype patrol or portal. */
     retro_i16 patrol_x;
     retro_i16 patrol_y;
     retro_i16 door_x;

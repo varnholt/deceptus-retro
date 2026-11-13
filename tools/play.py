@@ -49,7 +49,7 @@ class Host:
 
 def play(backend, core, library):
     window = tk.Tk()
-    window.title(f"Deceptus — {backend} | arrows move / Z jump / Up enter / Enter pause / R restart")
+    window.title(f"Deceptus — {backend} | arrows move / Z jump / Up interact / Enter pause / R restart")
     canvas = tk.Label(window, borderwidth=0)
     canvas.pack()
     if backend == 'gba':
