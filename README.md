@@ -10,6 +10,10 @@ reads the original map, tilesets, collision vectors and animation definitions
 from the neighbouring checkout; converted artwork and binary data are ignored.
 There is no second maintained copy of the artwork.
 
+Artwork keeps its original size and pixel grid at 1:1. The smaller SNES screen
+shows less of the world; future visibility improvements should use camera
+framing and scrolling. Palette conversion for the SNES remains necessary.
+
 ## Play the prototype
 
 The current workspace already has the SDK, emulator core and built ROM:

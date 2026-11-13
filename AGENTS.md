@@ -1,6 +1,7 @@
 # Project conventions
 
 - `../deceptus_engine` remains the authoritative source for Deceptus artwork, maps, animations and content terms. Do not commit copies of those assets here. Import and convert them into ignored output directories.
+- Preserve the artwork's original size and pixel grid at 1:1. Do not shrink or resample it to widen the view. Improve framing and scrolling instead. Console palette conversion is a separate constraint.
 - Keep shared runtime and gameplay in portable C90. PVSnesLib's 65816 compiler has 16-bit `int` and `long`, and a 32-bit `long long`; use the types in `include/retro/types.h`.
 - Use snake_case and lowercase explanatory comments. Keep braces on all branches and loops. Format C with the repository `.clang-format`.
 - Keep platform SDK headers and registers inside `src/platform/`. Shared code must build on a desktop compiler without a console SDK.
