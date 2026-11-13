@@ -153,11 +153,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--core', type=Path, default=ROOT / '.tools/mgba/mgba_libretro.dll')
     parser.add_argument('--rom', type=Path, default=ROOT / 'build/gba/deceptus.gba')
-    parser.add_argument("--scene", choices=["auto", "lever", "platforms", "tonight"], default="auto")
+    parser.add_argument("--scene", choices=["auto", "lever", "platforms", "tonight", "water"], default="auto")
     args = parser.parse_args()
     scene = args.scene
     if scene == 'auto':
-        if args.rom.stem.endswith('-platforms'):
+        if args.rom.stem.endswith('-water'):
+            scene = 'water'
+        elif args.rom.stem.endswith('-platforms'):
             scene = 'platforms'
         elif args.rom.stem.endswith('-lever'):
             scene = 'lever'
@@ -165,7 +167,10 @@ if __name__ == '__main__':
             scene = 'tonight'
         else:
             scene = json.loads((ROOT / 'build/gba/build.json').read_text()).get('scene', 'lever')
-    if scene == 'tonight':
+    if scene == 'water':
+        from verify_water import verify as verify_baked_water
+        verify_baked_water(args.core, args.rom)
+    elif scene == 'tonight':
         from verify_preview import verify as verify_campaign
         verify_campaign(args.core, args.rom)
     elif scene == 'platforms':

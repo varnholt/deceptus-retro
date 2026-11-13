@@ -39,7 +39,7 @@ typedef struct gba_upload {
 } gba_upload;
 static gba_upload uploads[32];
 static retro_u16 upload_count, upload_bytes;
-volatile retro_u16 retro_debug[34];
+volatile retro_u16 retro_debug[36];
 #if !GBA_STREAMED_BACKGROUND
 static retro_u16 map_chunk = 65535;
 #endif
@@ -404,6 +404,10 @@ static void video_commit(void)
 
 static void debug_write(void)
 {
+#if GBA_BACKGROUND_ANIMATION_COUNT
+    retro_debug[34] = background_clocks[0].frame;
+    retro_debug[35] = background_clocks[0].elapsed;
+#endif
     retro_debug[0] = 0xd3ce;
     retro_debug[1] = retro_floor(engine.entities[0].x);
     retro_debug[2] = retro_floor(engine.entities[0].y);

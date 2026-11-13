@@ -10,6 +10,11 @@ static retro_u16 stream_patterns[GBA_STREAM_JOBS], stream_slots[GBA_STREAM_JOBS]
 static retro_u16 stream_jobs, stream_cursor = 1;
 static retro_i16 stream_x = -1, stream_y = -1;
 static retro_u8 stream_changed;
+#if GBA_BACKGROUND_ANIMATION_COUNT
+#include "retro/animation.h"
+static retro_animation background_clocks[GBA_BACKGROUND_ANIMATION_COUNT];
+static retro_u16 background_previous_tick;
+#endif
 
 static void background_reset(void)
 {
@@ -28,10 +33,30 @@ static void background_reset(void)
     stream_cursor = 1;
     stream_x = -1;
     stream_y = -1;
+#if GBA_BACKGROUND_ANIMATION_COUNT
+    for (index = 0; index < GBA_BACKGROUND_ANIMATION_COUNT; ++index) {
+        retro_animation_reset(&background_clocks[index]);
+    }
+    background_previous_tick = engine.ticks;
+#endif
 }
 
 static const retro_u16 *background_cell(retro_u16 column, retro_u16 row)
 {
+#if GBA_BACKGROUND_ANIMATION_COUNT
+    retro_u16 index;
+    retro_u32 address;
+    const gba_background_animation *clip;
+    for (index = 0; index < GBA_BACKGROUND_ANIMATION_COUNT; ++index) {
+        clip = &gba_background_animations[index];
+        if (column >= clip->left && column < clip->left + clip->columns && row >= clip->top &&
+            row < clip->top + clip->rows) {
+            address = ((retro_u32)background_clocks[index].frame * clip->rows + row - clip->top) * clip->columns +
+                      column - clip->left;
+            return (const retro_u16 *)clip->cells + address * 2;
+        }
+    }
+#endif
     if (column >= GBA_ROOM_COLUMNS || row >= GBA_ROOM_ROWS) {
         return 0;
     }
@@ -46,6 +71,30 @@ static void __attribute__((section(".iwram"))) background_prepare(void)
     left = frame.camera_x >> 3;
     top = frame.camera_y >> 3;
     stream_changed = 0;
+#if GBA_BACKGROUND_ANIMATION_COUNT
+    {
+        retro_u16 ticks;
+        const gba_background_animation *clip;
+        ticks = (retro_u16)(engine.ticks - background_previous_tick);
+        /* restart resets the engine clock, rather than advancing it by 65535 ticks. */
+        if (ticks > 1) {
+            for (index = 0; index < GBA_BACKGROUND_ANIMATION_COUNT; ++index) {
+                retro_animation_reset(&background_clocks[index]);
+            }
+            stream_x = -1;
+            ticks = 0;
+        }
+        background_previous_tick = engine.ticks;
+        for (index = 0; index < GBA_BACKGROUND_ANIMATION_COUNT; ++index) {
+            clip = &gba_background_animations[index];
+            if (retro_animation_advance(&background_clocks[index], clip->frames, clip->frame_ticks, ticks, 1) &&
+                left < clip->left + clip->columns && left + 32 > clip->left && top < clip->top + clip->rows &&
+                top + 22 > clip->top) {
+                stream_x = -1;
+            }
+        }
+    }
+#endif
     if (stream_x == left && stream_y == top) {
         return;
     }

@@ -60,6 +60,22 @@ python tools/package_preview.py --build
 See [GBA.md](GBA.md) for resource layout and verified limits. Packaged controls
 and route help come from `assets/release/`.
 
+An additional development scene exercises the main hall's water surface:
+
+```powershell
+python tools/build_gba.py --scene water
+python tools/gba_emulator.py --scene water
+python tools/play.py --rom build/gba/deceptus-water.gba
+```
+
+The build reads the original map's surface and emitters, runs the source spring
+equations offline, and composites the original gradient into twelve native-size
+frames. The GBA streams visible tile changes at 10 fps using the shared C
+animation clock. The emitter schedule repeats deterministically instead of using
+the desktop game's random timings. This scene tests surface graphics only;
+swimming, reactive player splashes, water tile animations and stencil effects
+remain unfinished. It is separate from the four-area preview and tutorial work.
+
 ## Build from a fresh checkout
 
 Use Python 3.10+ and the packages in `requirements.txt`. GBA compilation uses
