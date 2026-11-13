@@ -28,7 +28,6 @@ endif()
 
 add_library(retro_preview SHARED src/platform/host/bridge.c assets/generated/room.c)
 target_link_libraries(retro_preview PRIVATE deceptus_game)
-target_include_directories(retro_preview PRIVATE assets/generated)
 add_dependencies(retro_preview convert_assets)
 
 include(CTest)

@@ -2,7 +2,6 @@
 
 import argparse
 import ctypes as C
-import json
 from pathlib import Path
 import time
 import tkinter as tk
@@ -16,7 +15,6 @@ class Host:
     def __init__(self, library):
         self.library = C.CDLL(str(library.resolve()))
         self.library.preview_init()
-        self.viewport = json.loads((ROOT / "assets/generated/viewport.json").read_text())
         self.room = Image.open(ROOT / "assets/generated/room-preview.png").convert("RGB")
         self.actors = Image.open(ROOT / "assets/generated/actors-preview.png")
         self.actors.info["transparency"] = 0
@@ -28,9 +26,7 @@ class Host:
 
     def run(self, buttons):
         self.library.preview_tick(buttons)
-        world_camera = self.library.preview_state(2)
-        numerator, denominator = self.viewport["numerator"], self.viewport["denominator"]
-        camera = world_camera * numerator // denominator
+        camera = self.library.preview_state(2)
         canvas = self.room.crop((camera, 0, camera + 256, 224)).convert("RGBA")
         for index in range(12):
             frame = self.library.preview_draw(index, 2)
@@ -44,10 +40,7 @@ class Host:
                 red, green, blue, alpha = sprite.split()
                 sprite = Image.merge("RGBA", (red.point(lambda value: value // 2),
                     green.point(lambda value: min(255, value + 45)), blue.point(lambda value: value // 2), alpha))
-            world_x = self.library.preview_draw(index, 0) + 16 + world_camera
-            world_y = self.library.preview_draw(index, 1) + 48
-            canvas.alpha_composite(sprite, (world_x * numerator // denominator - camera - 16,
-                                           world_y * numerator // denominator - 48))
+            canvas.alpha_composite(sprite, (self.library.preview_draw(index, 0), self.library.preview_draw(index, 1)))
         if self.library.preview_state(3):
             canvas = ImageEnhance.Brightness(canvas).enhance(0.5)
         return canvas

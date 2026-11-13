@@ -96,13 +96,8 @@ enters the portal. Screenshots and the state report are written to `artifacts/`.
 
 ## Data pipeline
 
-`assets/rooms/catacombs.json` selects a 768x336 crop from the original catacombs
-map and names the visual and collision layers. It converts artwork at two-thirds
-scale into a 512x224 background: original 24px terrain tiles become 16px tiles,
-and the visible player is approximately 24px tall. The screen shows 384x336
-source pixels, 50% more in each direction than the initial full-size prototype.
-Nearest-neighbour conversion keeps sharp pixels but discards some fine detail.
-Player frames are looked up in
+`assets/rooms/catacombs.json` selects a 512x224 crop from the original catacombs
+map and names the visual and collision layers. Player frames are looked up in
 the original `sprites/animations.json`; the texture is read from that checkout.
 The converter currently imports eight idle frames, eight run frames and two
 airborne frames. The patrol reuses those frames with a different palette; its
@@ -119,14 +114,11 @@ The collision grid uses 8px cells and an occupied-area threshold. Solid and
 one-way cells are separate. **Slopes currently become steps**; continuous slope
 collision is future work. Shader effects, lights and parallax are flattened or
 omitted, and arbitrary mechanisms/enemy scripts are not automatically translated.
-Collision, movement and object coordinates stay in original map units; the
-renderer converts absolute actor and camera coordinates using the same scale.
-This avoids camera-dependent rounding differences between actors and scenery.
 
 The vector converter is usable independently of the SNES image conversion:
 
 ```powershell
-python tools/vector_to_tiles.py ../deceptus_engine/data/level-catacombs/catacombs.tmx --layers level box_colliders --crop 3528 2832 768 336 --output artifacts/collision-review
+python tools/vector_to_tiles.py ../deceptus_engine/data/level-catacombs/catacombs.tmx --layers level box_colliders --crop 3528 2928 512 224 --output artifacts/collision-review
 ```
 
 It writes a pixel mask, grid preview, row-major collision bytes and a JSON
@@ -171,11 +163,10 @@ There are no GBA/Mega Drive backend stubs and neither target is claimed working.
 
 ## Current SNES budget and limitations
 
-- 256x224 NTSC output, a 768px-wide source room rendered at two-thirds scale
-  into a 512px-wide background, and horizontal camera following.
-- Two Mode 1 background planes preserve the converted image: 1,104 unique
-  patterns, plus one overflow blank, using 35,360 VRAM bytes and 8,192 map bytes.
-- The object sheet uses 15,360 VRAM bytes. Total allocated content is 58,912
+- 256x224 NTSC output, a 512px-wide room and horizontal camera following.
+- Two Mode 1 background planes preserve the converted image: 1,163 unique
+  patterns, plus one overflow blank, using 37,248 VRAM bytes and 8,192 map bytes.
+- The object sheet uses 15,360 VRAM bytes. Total allocated content is 60,800
   bytes out of 65,536, with unused reserved gaps in the address layout.
 - Each logical actor uses up to six 16x16 objects. A conservative overlap
   budget drops excess draws before exceeding per-scanline object/sliver limits.

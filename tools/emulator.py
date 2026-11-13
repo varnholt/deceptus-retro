@@ -203,8 +203,7 @@ def verify(core, rom):
         emulator.screenshot(ROOT / "artifacts/snes-ledge.png")
         emulator.run(15, [7])
         ledge = emulator.debug()
-        recipe = json.loads((ROOT / "assets/rooms/catacombs.json").read_text())
-        assert ledge["x"] > 440 and ledge["grounded"] and ledge["y"] == recipe["door"][1], "raised platform is unreachable"
+        assert ledge["x"] > 440 and ledge["grounded"] and ledge["y"] == 168, "raised platform is unreachable"
         emulator.screenshot(ROOT / "artifacts/snes-portal.png")
         emulator.run(12, [4])
         door = emulator.debug()

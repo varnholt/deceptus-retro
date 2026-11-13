@@ -13,14 +13,12 @@ extern const retro_room deceptus_room;
 
 static retro_engine engine;
 static retro_frame frame;
-static retro_video_caps video = {VIEWPORT_WORLD_WIDTH, VIEWPORT_WORLD_HEIGHT, RETRO_DRAW_CAPACITY};
+static retro_video_caps video = {256, 224, RETRO_DRAW_CAPACITY};
 static retro_i16 accepted_top[RETRO_DRAW_CAPACITY];
 static retro_i16 accepted_bottom[RETRO_DRAW_CAPACITY];
 
 /* a stable little-endian debug mailbox for emulator integration tests. */
 volatile retro_u16 retro_debug[12];
-
-static retro_i16 view_pixel(retro_i16 position) { return position * VIEW_SCALE_NUMERATOR / VIEW_SCALE_DENOMINATOR; }
 
 static retro_u16 input_read(void)
 {
@@ -67,20 +65,16 @@ static void video_init(void)
 static void video_prepare(void)
 {
     retro_u16 index, other, accepted, overlaps, object_id, tile_base, piece;
-    retro_i16 x, y, draw_x, draw_y;
+    retro_i16 x, y;
     const retro_draw *draw;
     oamClear(0, 0);
     object_id = 0;
     accepted = 0;
     for (index = 0; index < frame.count; ++index) {
         draw = &frame.draws[index];
-        /* map absolute coordinates before subtracting the camera to keep the
-         * pixel rounding identical to background scrolling. */
-        draw_x = view_pixel(draw->x + 16 + frame.camera_x) - view_pixel(frame.camera_x) - 16;
-        draw_y = view_pixel(draw->y + 48) - 48;
         overlaps = 0;
         for (other = 0; other < accepted; ++other) {
-            if (draw_y < accepted_bottom[other] && draw_y + 48 > accepted_top[other]) {
+            if (draw->y < accepted_bottom[other] && draw->y + 48 > accepted_top[other]) {
                 ++overlaps;
             }
         }
@@ -89,13 +83,13 @@ static void video_prepare(void)
         if (overlaps >= 8 || object_id > 128 * 4 - 6 * 4) {
             continue;
         }
-        accepted_top[accepted] = draw_y;
-        accepted_bottom[accepted] = draw_y + 48;
+        accepted_top[accepted] = draw->y;
+        accepted_bottom[accepted] = draw->y + 48;
         ++accepted;
         tile_base = (draw->frame % 4) * 4 + (draw->frame / 4) * 96;
         for (piece = 0; piece < 6; ++piece) {
-            x = draw_x + (draw->flip_x ? 1 - piece % 2 : piece % 2) * 16;
-            y = draw_y + (piece / 2) * 16;
+            x = draw->x + (draw->flip_x ? 1 - piece % 2 : piece % 2) * 16;
+            y = draw->y + (piece / 2) * 16;
             /* skip vertically clipped pieces to prevent 8-bit OAM y wrapping. */
             if (y <= -16 || y >= 224 || x <= -16 || x >= 256) {
                 continue;
@@ -148,8 +142,8 @@ int main(void)
         debug_write();
         WaitForVBlank();
         /* only register writes occur here; all OAM work is buffered above. */
-        bgSetScroll(0, view_pixel(frame.camera_x), 0);
-        bgSetScroll(1, view_pixel(frame.camera_x), 0);
+        bgSetScroll(0, frame.camera_x, 0);
+        bgSetScroll(1, frame.camera_x, 0);
         setBrightness(engine.paused ? 7 : 15);
     }
     return 0;

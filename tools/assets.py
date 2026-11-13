@@ -6,7 +6,6 @@ import argparse
 import hashlib
 import json
 import struct
-from fractions import Fraction
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -18,48 +17,15 @@ SOURCE = ROOT / "assets" / "source"
 GENERATED = ROOT / "assets" / "generated"
 
 
-def viewport_recipe(recipe):
-    numerator, denominator = recipe.get("render_scale", [1, 1])
-    if not isinstance(numerator, int) or not isinstance(denominator, int) or not 0 < numerator <= denominator:
-        raise ValueError("render_scale must contain positive integers with numerator <= denominator")
-    ratio = Fraction(numerator, denominator)
-    numerator, denominator = ratio.numerator, ratio.denominator
-    width, height = recipe["crop_pixels"][2:]
-    output = recipe.get("output_pixels", [width, height])
-    if output != [512, 224] or width * numerator != output[0] * denominator or height * numerator != output[1] * denominator:
-        raise ValueError("the selected crop and scale must produce a 512x224 background")
-    if (256 * denominator) % numerator or (224 * denominator) % numerator:
-        raise ValueError("viewport dimensions must be integral in source coordinates")
-    if width % recipe["collision_cell"] or height % recipe["collision_cell"]:
-        raise ValueError("source crop must align to collision cells")
-    if max(width, height) > 1984:
-        raise ValueError("source room exceeds the 12.4 local-coordinate budget")
-    return {"numerator": numerator, "denominator": denominator, "display_width": 256, "display_height": 224,
-            "world_width": 256 * denominator // numerator, "world_height": 224 * denominator // numerator}
-
-
-def scaled_actor(image, viewport):
-    """Scale a logical actor into its existing hardware frame, keeping its feet anchored."""
-    numerator, denominator = viewport["numerator"], viewport["denominator"]
-    result = Image.new("RGBA", image.size)
-    size = (round(image.width * numerator / denominator), round(image.height * numerator / denominator))
-    anchor_x = round((image.width // 2) * numerator / denominator)
-    result.alpha_composite(image.resize(size, Image.Resampling.NEAREST),
-                           (image.width // 2 - anchor_x, image.height - size[1]))
-    return result
-
-
 def import_deceptus(data):
     data = Path(data)
     SOURCE.mkdir(parents=True, exist_ok=True)
     recipe = json.loads((ROOT / "assets/rooms/catacombs.json").read_text())
-    viewport = viewport_recipe(recipe)
     tiled = TiledMap(data / recipe["map"])
     crop = recipe["crop_pixels"]
     names = recipe["visual_layers"]
     room = Image.new("RGBA", crop[2:], (10, 10, 20, 255))
     room.alpha_composite(tiled.render(crop, names))
-    room = room.resize(tuple(recipe["output_pixels"]), Image.Resampling.NEAREST)
     room.convert("RGB").save(SOURCE / "catacombs.png")
     # tile collision vectors, not artwork alpha; dynamic blockers stay dynamic.
     collision = tiled.render(crop, recipe["collision_layers"], collision=True)
@@ -80,19 +46,18 @@ def import_deceptus(data):
         left = int(offset_x + index * width + origin_x - 16)
         top = int(offset_y + origin_y - 48)
         image = original.crop((left, top, left + 32, top + 48))
-        sheet.alpha_composite(scaled_actor(image, viewport), ((frame % 4) * 32, (frame // 4) * 48))
+        sheet.alpha_composite(image, ((frame % 4) * 32, (frame // 4) * 48))
     # a simple prototype portal; original painted doors remain visible in the BG.
     portal = Image.new("RGBA", (32, 48))
     draw = ImageDraw.Draw(portal)
     draw.rounded_rectangle((3, 2, 28, 47), radius=10, fill=(22, 22, 44), outline=(221, 169, 97), width=2)
     draw.line((8, 45, 8, 16, 12, 8, 20, 8, 24, 16, 24, 45), fill=(120, 62, 100), width=2)
     draw.rectangle((20, 28, 22, 30), fill=(235, 190, 120))
-    sheet.alpha_composite(scaled_actor(portal, viewport), (64, 192))
+    sheet.alpha_composite(portal, (64, 192))
     sheet.save(SOURCE / "actors.png")
     manifest = {
         "source_map": "deceptus_engine/data/level-catacombs/catacombs.tmx",
         "crop_pixels": crop,
-        "viewport": viewport,
         "visual_layers": names,
         "collision_layers": ["level", "box_colliders"],
         "one_way_layers": ["level_solid_onesided"],
@@ -157,9 +122,6 @@ def palette_bytes(image, green=False):
 
 def compile_assets():
     GENERATED.mkdir(parents=True, exist_ok=True)
-    recipe = json.loads((ROOT / "assets/rooms/catacombs.json").read_text())
-    viewport = viewport_recipe(recipe)
-    (GENERATED / "viewport.json").write_text(json.dumps(viewport, indent=2) + "\n")
     room = Image.open(SOURCE / "catacombs.png").convert("RGB")
     # keep the label in the world so it consumes no extra background layer.
     draw = ImageDraw.Draw(room)
@@ -215,21 +177,16 @@ def compile_assets():
     (GENERATED / "asset_sizes.h").write_text(
         f"#define ROOM_PATTERN_BYTES {min(len(tiles), 1024) * 32}\n"
         f"#define OVERFLOW_PATTERN_BYTES {len(overflow) * 32}\n"
-        f"#define ACTOR_PATTERN_BYTES {len(actor_tiles) * 32}\n"
-        f"#define VIEWPORT_WORLD_WIDTH {viewport['world_width']}\n"
-        f"#define VIEWPORT_WORLD_HEIGHT {viewport['world_height']}\n"
-        f"#define VIEW_SCALE_NUMERATOR {viewport['numerator']}\n"
-        f"#define VIEW_SCALE_DENOMINATOR {viewport['denominator']}\n")
+        f"#define ACTOR_PATTERN_BYTES {len(actor_tiles) * 32}\n")
+    recipe = json.loads((ROOT / "assets/rooms/catacombs.json").read_text())
     solid = collision_grid(Image.open(SOURCE / "collision.png"), recipe["collision_cell"], recipe["coverage_threshold"])
     one_way = collision_grid(Image.open(SOURCE / "one_way.png"), threshold=0.125)
     collision = [1 if first else 2 if second else 0 for first, second in zip(solid, one_way)]
     (GENERATED / "collision.bin").write_bytes(bytes(collision))
     lines = ["#include \"retro/engine.h\"", "", "static const retro_u8 room_collision[] = {"]
-    columns = recipe["crop_pixels"][2] // recipe["collision_cell"]
-    rows = recipe["crop_pixels"][3] // recipe["collision_cell"]
-    lines += ["    " + ",".join(map(str, collision[offset:offset + columns])) + "," for offset in range(0, len(collision), columns)]
+    lines += ["    " + ",".join(map(str, collision[offset:offset + 64])) + "," for offset in range(0, len(collision), 64)]
     coordinates = recipe["spawn"] + recipe["patrol"] + recipe["door"]
-    lines += ["};", "", "const retro_room deceptus_room = {", f"    room_collision, {columns}, {rows}, " + ", ".join(map(str, coordinates)), "};", ""]
+    lines += ["};", "", "const retro_room deceptus_room = {", "    room_collision, 64, 28, " + ", ".join(map(str, coordinates)), "};", ""]
     (GENERATED / "room.c").write_text("\n".join(lines))
     sections = []
     for label, filename in [("room_patterns", "room.pic"), ("room_palette", "room.pal"),
@@ -239,7 +196,6 @@ def compile_assets():
                      f'.incbin "../../assets/generated/{filename}"', f"{label}_end:", ".ends", ""]
     (GENERATED / "data.asm").write_text('.include "hdr.asm"\n\n' + "\n".join(sections))
     report = {"background_tiles": len(tiles), "background_tile_limit": 1279,
-              "viewport": viewport,
               "background_vram_bytes": (len(tiles) + 1) * 32, "tilemap_vram_bytes": 8192,
               "object_vram_bytes": len(actor_tiles) * 32, "collision_rom_bytes": len(collision),
               "background_palettes": 1, "object_palettes": 2, "max_logical_draws": 12,
