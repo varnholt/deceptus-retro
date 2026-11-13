@@ -1,0 +1,8 @@
+.tools/
+build/
+artifacts/
+__pycache__/
+*.pyc
+.venv/
+assets/source/
+assets/generated/
