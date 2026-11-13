@@ -17,6 +17,21 @@ add_custom_target(convert_assets
     COMMENT "converting assets from the main engine checkout")
 
 add_library(retro_engine STATIC src/engine/world.c src/engine/entities.c src/engine/mechanisms.c src/engine/logic.c src/engine/enemies.c src/engine/animation.c src/engine/adventure.c)
+# private modules remain visible to IDEs, but mechanisms.c compiles them together.
+set(RETRO_MECHANISM_PARTS
+    src/engine/mechanisms/blockingrect.c
+    src/engine/mechanisms/checkpoint.c
+    src/engine/mechanisms/collapsingplatform.c
+    src/engine/mechanisms/damagerect.c
+    src/engine/mechanisms/gamemechanism.c
+    src/engine/mechanisms/lever.c
+    src/engine/mechanisms/onoffblock.c
+    src/engine/mechanisms/sensorrect.c
+    src/engine/mechanisms/spikeblock.c
+    src/engine/mechanisms/switchanimation.c
+    src/engine/mechanisms/mechanisminternal.h)
+set_source_files_properties(${RETRO_MECHANISM_PARTS} PROPERTIES HEADER_FILE_ONLY TRUE)
+target_sources(retro_engine PRIVATE ${RETRO_MECHANISM_PARTS})
 target_include_directories(retro_engine PUBLIC include)
 set_target_properties(retro_engine PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(deceptus_game STATIC src/game/deceptus.c src/game/campaign.c)

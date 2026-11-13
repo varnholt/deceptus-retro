@@ -12,7 +12,7 @@ shared code under a very different compiler and resource budget.
 | `include/retro/` | Shared types, input, world, entities, mechanisms, animation, campaign and adventure contracts |
 | `src/engine/world.c` | Grid collision, dynamic blockers, one-way floors and body clearance |
 | `src/engine/entities.c`, `enemies.c` | Bounded entity/projectile services and native enemy behavior |
-| `src/engine/mechanisms.c`, `logic.c` | Mechanism state machines, queues and bounded compiled actions |
+| `src/engine/mechanisms/`, `logic.c` | Original-named mechanism modules, bounded state/queues and compiled actions |
 | `src/engine/adventure.c` | Inventory transactions, interaction conditions, dialogue/menu modes, portals and room state |
 | `src/game/deceptus.c`, `campaign.c` | Player/game rules and the curated preview campaign |
 | `src/platform/gba/` | Registers, input, DMA, tile residency, OAM, menus, UI and cartridge startup |
@@ -23,6 +23,42 @@ shared code under a very different compiler and resource budget.
 Console registers and SDK headers belong only in platform code. There is no
 runtime SFML, Lua interpreter, heap allocation or floating-point simulation.
 The GBA uses a small freestanding runtime rather than a host C library.
+
+## Mechanism source correspondence
+
+Keep the original engine's vocabulary and recognizable file names when porting.
+The reusable C versions live under `src/engine/mechanisms/`; their original C++
+counterparts live under `deceptus_engine/src/game/mechanisms/`.
+
+| Original file | C module | Responsibility |
+| --- | --- | --- |
+| `gamemechanism.cpp` | `gamemechanism.c` | Binding/validation, source-id lookup, event queue, enable requests, update coordination |
+| `lever.cpp` | `lever.c` | Handle restriction, animation/cooldown, linked-target transaction |
+| `onoffblock.cpp` | `onoffblock.c` | Initial visibility/collision state, inversion and collision query |
+| `spikeblock.cpp` | `spikeblock.c` | Initial frame and damaging animation frames |
+| `collapsingplatform.cpp` | `collapsingplatform.c` | Foot contact, collapse, respawn and collision |
+| `checkpoint.cpp` | `checkpoint.c` | One-shot reached notification |
+| `sensorrect.cpp` | `sensorrect.c` | Enter/leave notifications |
+| `damagerect.cpp` | `damagerect.c` | Contact damage notification |
+| `blockingrect.cpp` | `blockingrect.c` | Common dynamic-solid query for supported blocker families |
+
+`switchanimation.c` holds the shared on/off/spike animation queue implementation.
+Its frame rules come from the original families, not a new visual design.
+The mapping describes responsibility, not a claim that every feature of each
+original C++ class has been ported.
+
+`src/engine/mechanisms.c` is a small unity-build entry that includes the private
+modules. Build this entry, not the individual implementation files as separate
+objects. This intentionally preserves static cross-family inlining, the existing
+GBA IWRAM placement and the SNES compiler's optimization scope. CMake lists the
+private modules as header-only sources for IDE navigation. The public API stays
+in `include/retro/mechanisms.h`; no virtual dispatch, heap objects or additional
+per-instance state are introduced by the source split.
+
+Use matching source basenames for future enemy ports, such as `blob_2.c` for
+`blob_2.lua`. Keep source object ids, properties and state meanings. The C90,
+fixed-point and fixed-capacity constraints can change representation, but should
+not obscure the original engine concepts.
 
 ## Simulation and memory
 

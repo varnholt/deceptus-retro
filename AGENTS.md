@@ -6,6 +6,7 @@
 - Keep shared runtime and gameplay in portable C90. PVSnesLib's 65816 compiler has 16-bit `int` and `long`, and a 32-bit `long long`; use the types in `include/retro/types.h`.
 - Use snake_case and lowercase explanatory comments. Keep braces on all branches and loops. Format C with the repository `.clang-format`.
 - Keep platform SDK headers and registers inside `src/platform/`. Shared code must build on a desktop compiler without a console SDK.
+- Preserve the original engine's identity when porting: use recognizable mechanism names and source enemy-script basenames, retain source object ids and property meanings, and keep a direct original-to-C file map. Prefer faithful C translations of existing concepts over new generic abstractions. Document necessary console-specific differences.
 - Keep reusable collision and entity allocation in `src/engine/`, Deceptus rules in `src/game/`, and build-time conversions in `tools/`.
 - Use caller-owned memory, fixed-capacity pools and bounded event/render queues. Do not add heap allocation or floating point to frame-time runtime code.
 - Positions are signed 12.4 fixed point in room coordinates. Velocities must stay below one 8px collision cell per tick. Larger worlds must use room/chunk origins, not overflow local coordinates.
