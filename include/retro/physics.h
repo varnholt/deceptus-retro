@@ -9,5 +9,9 @@ retro_i16 retro_position_cell(retro_fixed position);
  * per tick; the caller supplies its body size and applies acceleration. */
 void retro_move_horizontal(const retro_room *room, retro_entity *entity, retro_u8 half_width, retro_u8 height);
 void retro_move_vertical(const retro_room *room, retro_entity *entity, retro_u8 half_width, retro_u8 height);
+void retro_move_horizontal_dynamic(const retro_room *room, retro_entity *entity, retro_u8 half_width, retro_u8 height,
+                                   const retro_mechanism_set *mechanisms);
+void retro_move_vertical_dynamic(const retro_room *room, retro_entity *entity, retro_u8 half_width, retro_u8 height,
+                                 const retro_mechanism_set *mechanisms);
 
 #endif

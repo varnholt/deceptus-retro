@@ -1,6 +1,7 @@
 #ifndef RETRO_ENGINE_H
 #define RETRO_ENGINE_H
 
+#include "retro/mechanisms.h"
 #include "retro/types.h"
 
 #define RETRO_ENTITY_CAPACITY 12
@@ -27,6 +28,7 @@
 #define RETRO_EVENT_JUMP 1
 #define RETRO_EVENT_HURT 2
 #define RETRO_EVENT_DOOR 3
+#define RETRO_EVENT_CHECKPOINT 4
 
 typedef struct retro_input {
     retro_u16 held;
@@ -44,6 +46,10 @@ typedef struct retro_room {
     retro_i16 patrol_y;
     retro_i16 door_x;
     retro_i16 door_y;
+    const retro_mechanism_def *mechanisms;
+    retro_u16 mechanism_count;
+    const retro_u16 *mechanism_targets;
+    retro_u16 mechanism_target_count;
 } retro_room;
 
 typedef struct retro_entity {
@@ -102,6 +108,11 @@ typedef struct retro_engine {
     retro_u8 paused;
     retro_u8 health;
     retro_u8 hurt_ticks;
+    retro_mechanism_set mechanisms;
+    retro_i16 checkpoint_x;
+    retro_i16 checkpoint_y;
+    retro_u16 checkpoint_id;
+    retro_u8 content_error;
 } retro_engine;
 
 /* initializes caller-owned state; room and collision storage must outlive it. */

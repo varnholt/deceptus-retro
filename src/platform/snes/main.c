@@ -18,7 +18,7 @@ static retro_i16 accepted_top[RETRO_DRAW_CAPACITY];
 static retro_i16 accepted_bottom[RETRO_DRAW_CAPACITY];
 
 /* a stable little-endian debug mailbox for emulator integration tests. */
-volatile retro_u16 retro_debug[12];
+volatile retro_u16 retro_debug[16];
 
 static retro_u16 input_read(void)
 {
@@ -117,6 +117,10 @@ static void debug_write(void)
     retro_debug[9] = engine.event_count;
     retro_debug[10] = frame.count;
     retro_debug[11] = engine.entities[1].active;
+    retro_debug[12] = engine.checkpoint_id;
+    retro_debug[13] = engine.checkpoint_x;
+    retro_debug[14] = engine.checkpoint_y;
+    retro_debug[15] = engine.content_error;
 }
 
 int main(void)

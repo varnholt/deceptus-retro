@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from tiled import TiledMap, collision_grid
 from palettes import banked_background, palette_rgb555
+from content import crop_mechanisms
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "assets" / "source"
@@ -56,6 +57,9 @@ def import_deceptus(data):
     draw.rectangle((20, 28, 22, 30), fill=(235, 190, 120))
     sheet.alpha_composite(portal, (64, 192))
     sheet.save(SOURCE / "actors.png")
+    definitions, targets, unsupported = crop_mechanisms(data, recipe)
+    (SOURCE / "mechanisms.json").write_text(json.dumps({"definitions": definitions, "targets": targets,
+        "unsupported_objects": unsupported, "source_map": recipe["map"]}, indent=2) + "\n")
     manifest = {
         "source_map": "deceptus_engine/data/level-catacombs/catacombs.tmx",
         "crop_pixels": crop,
@@ -191,7 +195,21 @@ def compile_assets():
     lines = ["#include \"retro/engine.h\"", "", "static const retro_u8 room_collision[] = {"]
     lines += ["    " + ",".join(map(str, collision[offset:offset + 64])) + "," for offset in range(0, len(collision), 64)]
     coordinates = recipe["spawn"] + recipe["patrol"] + recipe["door"]
-    lines += ["};", "", "const retro_room deceptus_room = {", "    room_collision, 64, 28, " + ", ".join(map(str, coordinates)), "};", ""]
+    lines += ["};", ""]
+    mechanisms = json.loads((SOURCE / "mechanisms.json").read_text())
+    definitions, targets = mechanisms["definitions"], mechanisms["targets"]
+    if definitions:
+        lines += ["static const retro_mechanism_def room_mechanisms[] = {"]
+        for definition in definitions:
+            bounds = ', '.join(map(str, definition['bounds']))
+            lines.append(f"    {{{definition['source_id']}, {{{bounds}}}, {definition['target_first']}, "
+                         f"{definition['target_count']}, {definition['value']}, {definition['kind']}, "
+                         f"{definition['enabled']}, {definition['flags']}}},")
+        lines += ["};", ""]
+    if targets:
+        lines += ["static const retro_u16 room_targets[] = {" + ', '.join(map(str, targets)) + "};", ""]
+    lines += ["const retro_room deceptus_room = {", "    room_collision, 64, 28, " + ", ".join(map(str, coordinates)) + ",",
+              f"    {'room_mechanisms' if definitions else '0'}, {len(definitions)}, {'room_targets' if targets else '0'}, {len(targets)}", "};", ""]
     (GENERATED / "room.c").write_text("\n".join(lines))
     sections = []
     for label, filename in [("room_patterns", "room.pic"), ("room_palette", "room.pal"),

@@ -12,4 +12,5 @@
 - Treat logical frames and palette roles as game assets. Encode SNES/GBA/Mega Drive tile, palette, DMA and sprite details in converters and backends.
 - Keep GBA and Mega Drive as future backends until they compile and run. Do not add placeholder implementations that report success.
 - Verify changes with native engine/converter tests and, for SNES changes, the actual ROM integration route in `tools/emulator.py`.
+- Keep unsupported mechanisms and Lua constructs explicit in content reports and build errors. A passing prototype build does not establish full-game support. Compare compiled callbacks against original Lua execution where possible.
 - Preserve ownership and dependency notices. Do not add attribution trailers to commits.

@@ -144,9 +144,10 @@ class Emulator:
         marker = memory.find(b"\xce\xd3")
         if marker < 0:
             raise RuntimeError("game debug mailbox not found: game has not reached its loop")
-        values = struct.unpack_from("<12H", memory, marker)
+        values = struct.unpack_from("<16H", memory, marker)
         return dict(zip(["magic", "x", "y", "camera_x", "ticks", "paused", "health", "grounded",
-                         "door_entries", "events", "draws", "patrol_active"], values))
+                         "door_entries", "events", "draws", "patrol_active", "checkpoint_id",
+                         "checkpoint_x", "checkpoint_y", "content_error"], values))
 
     def screenshot(self, path):
         if self.last_image is None:
@@ -163,6 +164,7 @@ def verify(core, rom):
     try:
         emulator.run(120)
         initial = emulator.debug()
+        assert not initial["content_error"], "imported mechanisms failed to bind"
         emulator.screenshot(ROOT / "artifacts/snes-boot.png")
         # verify actual PPU tile attributes and all palette banks, not just files.
         # with BG scroll Y=0, the SNES starts displaying map row 1.
@@ -213,7 +215,8 @@ def verify(core, rom):
         emulator.screenshot(ROOT / "artifacts/snes-portal.png")
         emulator.run(12, [4])
         door = emulator.debug()
-        assert door["door_entries"] == 1 and door["x"] == initial["x"], "portal did not return to checkpoint"
+        assert door["checkpoint_id"] == 1058, "the original Tiled checkpoint was not activated"
+        assert door["door_entries"] == 1 and door["x"] == door["checkpoint_x"], "portal did not return to the imported checkpoint"
         report = {"core": emulator.version, "boot": initial, "walk": moving, "jump": jumping,
                   "land": landed, "pause": paused, "restart": reset, "stomp": stomp,
                   "ledge": ledge, "door": door, "video_frames": emulator.video_frames}

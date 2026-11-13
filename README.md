@@ -4,6 +4,10 @@ A playable SNES prototype and the start of a portable C runtime for SNES, GBA
 and Mega Drive. SNES is the only implemented console backend. The desktop
 preview runs the same C simulation.
 
+The full-game port has started; see [PORTING.md](PORTING.md) for the source
+inventory, Lua compilation strategy, verified scope and remaining work. The
+current ROM is still a prototype, not the whole game.
+
 `deceptus_engine` remains the main repository and the source of truth for game
 content. This repository contains code and conversion recipes. Every build
 reads the original map, tilesets, collision vectors and animation definitions
@@ -37,7 +41,9 @@ also open `build/snes/deceptus.sfc`.
 
 Walk right, jump onto the patrol actor to defeat it, then jump onto the raised
 platform and enter the gold portal. The prototype portal returns to the room's
-checkpoint. Contact damage also returns there. It does not load a second room.
+checkpoint. Walking through the original grandfather clock activates its
+imported checkpoint rectangle; subsequent returns use that position. Contact
+damage also returns there. State is held in RAM only. It does not load a second room.
 
 ## Build from a fresh checkout
 
@@ -144,6 +150,11 @@ A future GBA converter must start from the same lossless import and choose its
 own palette strategy. It must not read the already reduced SNES PNG. GBA colour
 and tile encoding belong to that backend; no GBA game build is implemented yet.
 
+The content tools also export supported rectangle mechanisms from the original
+map. Checkpoints are active in the prototype; native fixtures test lever/block
+links, sensor edges, damage and dynamically enabled collision. Other crop objects
+are reported as unsupported in `assets/source/mechanisms.json`.
+
 SNES output includes 4bpp planar tiles, flip-deduplicated maps, 15-bit palettes,
 object sheets, C collision tables and `assets/generated/budget.json`. A native
 test decodes both hardware background maps and checks that they reconstruct
@@ -193,8 +204,9 @@ There are no GBA/Mega Drive backend stubs and neither target is claimed working.
 - The 60Hz simulation catches up across missed rendering deadlines, with a
   maximum of four catch-up ticks. **Rendering currently drops frames**, especially
   while moving or showing more actors. This is not a locked-60fps port.
-- No sound/music, save storage, second-room loading, real slope handling, combat
-  weapons, Lua translation or general mechanism importer yet.
+- No sound/music, save storage, second-room loading, real slope handling or combat
+  weapons yet. A limited Lua callback compiler and rectangle mechanism importer
+  are implemented; complete enemy scripts, level logic and mechanism visuals remain.
 - Verified in Snes9x and on the Windows native build; **not tested on hardware**.
 
 The next useful engine work is room/resource streaming, improved slopes,

@@ -29,7 +29,27 @@ retro_i16 retro_position_cell(retro_fixed position)
     return -1 - ((-1 - pixel) / RETRO_CELL_SIZE);
 }
 
-void retro_move_horizontal(const retro_room *room, retro_entity *entity, retro_u8 half_width, retro_u8 height)
+static retro_u8 collision_cell(const retro_room *room, const retro_mechanism_set *mechanisms, retro_i16 column,
+                               retro_i16 row)
+{
+    retro_rect bounds;
+    retro_u8 value;
+    value = retro_cell(room, column, row);
+    if (!mechanisms || !mechanisms->count || (value & RETRO_SOLID)) {
+        return value;
+    }
+    bounds.x = column * RETRO_CELL_SIZE;
+    bounds.y = row * RETRO_CELL_SIZE;
+    bounds.width = RETRO_CELL_SIZE;
+    bounds.height = RETRO_CELL_SIZE;
+    if (retro_mechanism_solid(mechanisms, &bounds)) {
+        value |= RETRO_SOLID;
+    }
+    return value;
+}
+
+void retro_move_horizontal_dynamic(const retro_room *room, retro_entity *entity, retro_u8 half_width, retro_u8 height,
+                                   const retro_mechanism_set *mechanisms)
 {
     retro_fixed next_x;
     retro_i16 column, top, bottom, row;
@@ -41,7 +61,7 @@ void retro_move_horizontal(const retro_room *room, retro_entity *entity, retro_u
     }
     column = retro_position_cell(next_x + RETRO_FIXED(entity->velocity_x > 0 ? half_width - 1 : -half_width));
     for (row = top; row <= bottom; ++row) {
-        if (retro_cell(room, column, row) & RETRO_SOLID) {
+        if (collision_cell(room, mechanisms, column, row) & RETRO_SOLID) {
             if (entity->velocity_x > 0) {
                 next_x = RETRO_FIXED(column * RETRO_CELL_SIZE - half_width);
             } else {
@@ -54,7 +74,8 @@ void retro_move_horizontal(const retro_room *room, retro_entity *entity, retro_u
     entity->x = next_x;
 }
 
-void retro_move_vertical(const retro_room *room, retro_entity *entity, retro_u8 half_width, retro_u8 height)
+void retro_move_vertical_dynamic(const retro_room *room, retro_entity *entity, retro_u8 half_width, retro_u8 height,
+                                 const retro_mechanism_set *mechanisms)
 {
     retro_fixed next_y;
     retro_i16 row, left, right, column, old_bottom;
@@ -66,7 +87,7 @@ void retro_move_vertical(const retro_room *room, retro_entity *entity, retro_u8 
     row = retro_position_cell(entity->velocity_y >= 0 ? next_y - 1 : next_y - RETRO_FIXED(height));
     entity->grounded = 0;
     for (column = left; column <= right; ++column) {
-        cell = retro_cell(room, column, row);
+        cell = collision_cell(room, mechanisms, column, row);
         blocked = (cell & RETRO_SOLID) != 0;
         if ((cell & RETRO_ONE_WAY) && entity->velocity_y >= 0 && old_bottom <= row * RETRO_CELL_SIZE) {
             blocked = 1;
@@ -83,4 +104,14 @@ void retro_move_vertical(const retro_room *room, retro_entity *entity, retro_u8 
         }
     }
     entity->y = next_y;
+}
+
+void retro_move_horizontal(const retro_room *room, retro_entity *entity, retro_u8 half_width, retro_u8 height)
+{
+    retro_move_horizontal_dynamic(room, entity, half_width, height, 0);
+}
+
+void retro_move_vertical(const retro_room *room, retro_entity *entity, retro_u8 half_width, retro_u8 height)
+{
+    retro_move_vertical_dynamic(room, entity, half_width, height, 0);
 }

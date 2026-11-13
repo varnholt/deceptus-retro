@@ -26,8 +26,8 @@ static void respawn(retro_engine *engine)
 {
     retro_entity *player;
     player = &engine->entities[0];
-    player->x = RETRO_FIXED(engine->room->spawn_x);
-    player->y = RETRO_FIXED(engine->room->spawn_y);
+    player->x = RETRO_FIXED(engine->checkpoint_x);
+    player->y = RETRO_FIXED(engine->checkpoint_y);
     player->velocity_x = 0;
     player->velocity_y = 0;
     player->grounded = 0;
@@ -43,6 +43,10 @@ void retro_init(retro_engine *engine, const retro_room *room, const retro_video_
     engine->room = room;
     engine->video = saved_video;
     engine->health = 3;
+    engine->checkpoint_x = room->spawn_x;
+    engine->checkpoint_y = room->spawn_y;
+    engine->content_error = !retro_mechanisms_init(&engine->mechanisms, room->mechanisms, room->mechanism_count,
+                                                   room->mechanism_targets, room->mechanism_target_count);
     retro_spawn(engine, RETRO_PLAYER, room->spawn_x, room->spawn_y);
     retro_spawn(engine, RETRO_PATROL, room->patrol_x, room->patrol_y);
     retro_spawn(engine, RETRO_DOOR, room->door_x, room->door_y);
@@ -105,8 +109,8 @@ static void update_player(retro_engine *engine, const retro_input *input)
     if (player->velocity_y > MAX_FALL) {
         player->velocity_y = MAX_FALL;
     }
-    retro_move_horizontal(engine->room, player, PLAYER_HALF_WIDTH, PLAYER_HEIGHT);
-    retro_move_vertical(engine->room, player, PLAYER_HALF_WIDTH, PLAYER_HEIGHT);
+    retro_move_horizontal_dynamic(engine->room, player, PLAYER_HALF_WIDTH, PLAYER_HEIGHT, &engine->mechanisms);
+    retro_move_vertical_dynamic(engine->room, player, PLAYER_HALF_WIDTH, PLAYER_HEIGHT, &engine->mechanisms);
     ++player->animation_ticks;
     if (!player->grounded) {
         player->frame = player->velocity_y < 0 ? 16 : 17;
@@ -117,15 +121,13 @@ static void update_player(retro_engine *engine, const retro_input *input)
     }
 }
 
-static void hurt(retro_engine *engine)
+static void hurt(retro_engine *engine, retro_u16 damage)
 {
-    if (engine->hurt_ticks) {
+    if (engine->hurt_ticks || !damage) {
         return;
     }
     engine->hurt_ticks = 60;
-    if (engine->health) {
-        --engine->health;
-    }
+    engine->health = damage >= engine->health ? 0 : (retro_u8)(engine->health - damage);
     if (!engine->health) {
         engine->health = 3;
     }
@@ -156,11 +158,11 @@ static void update_actors(retro_engine *engine, const retro_input *input)
             if (entity->velocity_y > MAX_FALL) {
                 entity->velocity_y = MAX_FALL;
             }
-            retro_move_horizontal(engine->room, entity, PLAYER_HALF_WIDTH, PLAYER_HEIGHT);
+            retro_move_horizontal_dynamic(engine->room, entity, PLAYER_HALF_WIDTH, PLAYER_HEIGHT, &engine->mechanisms);
             if (!entity->velocity_x) {
                 entity->facing_left = !entity->facing_left;
             }
-            retro_move_vertical(engine->room, entity, PLAYER_HALF_WIDTH, PLAYER_HEIGHT);
+            retro_move_vertical_dynamic(engine->room, entity, PLAYER_HALF_WIDTH, PLAYER_HEIGHT, &engine->mechanisms);
             entity->frame = 8 + (engine->ticks / 6) % 8;
         }
         distance_x = retro_floor(player->x - entity->x);
@@ -172,7 +174,7 @@ static void update_actors(retro_engine *engine, const retro_input *input)
                     player->velocity_y = -50;
                     event_push(engine, RETRO_EVENT_JUMP);
                 } else {
-                    hurt(engine);
+                    hurt(engine, 1);
                 }
             } else if (entity->kind == RETRO_DOOR && (input->pressed & RETRO_UP)) {
                 ++engine->door_entries;
@@ -187,7 +189,15 @@ void retro_tick(retro_engine *engine, retro_u16 buttons)
 {
     retro_input input;
     retro_i16 maximum_camera, target;
+    retro_u16 mechanism_index;
+    retro_i16 mechanism_slot;
     retro_entity *player;
+    retro_rect player_rect;
+    const retro_mechanism_event *mechanism_event;
+    const retro_mechanism_def *mechanism;
+    if (engine->content_error) {
+        return;
+    }
     input.held = buttons;
     input.pressed = buttons & ~engine->previous_buttons;
     input.released = engine->previous_buttons & ~buttons;
@@ -211,13 +221,32 @@ void retro_tick(retro_engine *engine, retro_u16 buttons)
         --engine->hurt_ticks;
     }
     update_player(engine, &input);
+    player = &engine->entities[0];
+    player_rect.x = retro_floor(player->x) - PLAYER_HALF_WIDTH;
+    player_rect.y = retro_floor(player->y) - PLAYER_HEIGHT;
+    player_rect.width = PLAYER_HALF_WIDTH * 2;
+    player_rect.height = PLAYER_HEIGHT;
+    retro_mechanisms_tick(&engine->mechanisms, &player_rect, (input.pressed & RETRO_UP) != 0);
+    for (mechanism_index = 0; mechanism_index < engine->mechanisms.event_count; ++mechanism_index) {
+        mechanism_event = &engine->mechanisms.events[mechanism_index];
+        if (mechanism_event->kind == RETRO_MECH_REACHED) {
+            mechanism_slot = retro_mechanism_find(&engine->mechanisms, mechanism_event->source_id);
+            mechanism = &engine->mechanisms.definitions[mechanism_slot];
+            engine->checkpoint_x = mechanism->bounds.x + mechanism->bounds.width / 2;
+            engine->checkpoint_y = mechanism->bounds.y + mechanism->bounds.height;
+            engine->checkpoint_id = mechanism->source_id;
+            event_push(engine, RETRO_EVENT_CHECKPOINT);
+        } else if (mechanism_event->kind == RETRO_MECH_HIT) {
+            hurt(engine, mechanism_event->value);
+        }
+    }
     update_actors(engine, &input);
     player = &engine->entities[0];
     if (retro_floor(player->y) > engine->room->rows * RETRO_CELL_SIZE + PLAYER_HEIGHT ||
         (retro_cell(engine->room, retro_position_cell(player->x), retro_position_cell(player->y - 1)) & RETRO_HAZARD)) {
         /* falling must recover even during the contact invulnerability interval. */
         engine->hurt_ticks = 0;
-        hurt(engine);
+        hurt(engine, 1);
     }
     target = retro_floor(player->x) - engine->video.width / 2;
     maximum_camera = engine->room->columns * RETRO_CELL_SIZE - engine->video.width;

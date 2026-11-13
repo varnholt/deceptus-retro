@@ -46,6 +46,12 @@ PREVIEW_API int preview_state(int field)
         return engine.entities[0].grounded;
     case 7:
         return engine.ticks;
+    case 8:
+        return engine.checkpoint_id;
+    case 9:
+        return engine.checkpoint_x;
+    case 10:
+        return engine.checkpoint_y;
     default:
         return 0;
     }

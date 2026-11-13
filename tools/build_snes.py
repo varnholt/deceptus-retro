@@ -14,9 +14,13 @@ def run(command, folder):
     subprocess.run(list(map(str, command)), cwd=folder, check=True)
 
 
-def build(sdk, data):
+def build(sdk, data, full_game=False):
     folder = ROOT / "build/snes"
     folder.mkdir(parents=True, exist_ok=True)
+    if full_game:
+        result = subprocess.run([sys.executable, str(ROOT / "tools/content.py"), "--data", str(data), "--strict"], cwd=ROOT)
+        if result.returncode:
+            raise SystemExit("Full-game build is incomplete. See build/content/summary.json; the existing ROM is still the prototype.")
     run([sys.executable, ROOT / "tools/assets.py", "--import-data", data], ROOT)
     suffix = ".exe" if os.name == "nt" else ""
     compiler = sdk / "devkitsnes/bin" / ("816-tcc" + suffix)
@@ -34,7 +38,8 @@ def build(sdk, data):
         header = header.replace(f"@{key}@", value)
     (folder / "hdr.asm").write_text(header)
     objects = []
-    sources = [ROOT / "src/engine/world.c", ROOT / "src/engine/entities.c", ROOT / "src/game/deceptus.c",
+    sources = [ROOT / "src/engine/world.c", ROOT / "src/engine/entities.c", ROOT / "src/engine/mechanisms.c",
+               ROOT / "src/engine/logic.c", ROOT / "src/game/deceptus.c",
                ROOT / "src/platform/snes/main.c", ROOT / "assets/generated/room.c"]
     for source in sources:
         stem = source.stem
@@ -58,5 +63,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdk", type=Path, default=Path(os.environ.get("PVSNESLIB_HOME", ROOT / ".tools/pvsneslib")))
     parser.add_argument("--data", type=Path, default=ROOT.parent / "deceptus_engine/data")
+    parser.add_argument("--full-game", action="store_true", help="require complete content support instead of building the prototype")
     arguments = parser.parse_args()
-    build(arguments.sdk.resolve(), arguments.data.resolve())
+    build(arguments.sdk.resolve(), arguments.data.resolve(), arguments.full_game)

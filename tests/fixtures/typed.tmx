@@ -1,0 +1,12 @@
+<map>
+  <group offsetx="16" offsety="8">
+    <objectgroup name="levers">
+      <object id="13" name="lever" x="24" y="32" width="72" height="48">
+        <properties>
+          <property name="enabled" type="bool" value="false"/>
+          <property name="index" type="int" value="3"/>
+        </properties>
+      </object>
+    </objectgroup>
+  </group>
+</map>
