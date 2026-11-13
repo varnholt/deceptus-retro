@@ -24,7 +24,13 @@ static retro_frame frame;
 static retro_video_caps video = {240, 160, RETRO_DRAW_CAPACITY};
 static gba_object objects[128] __attribute__((aligned(4)));
 static retro_u16 uploaded_frame[RETRO_DRAW_CAPACITY];
-volatile retro_u16 retro_debug[23];
+typedef struct gba_upload {
+    retro_u16 resource;
+    retro_u16 offset;
+} gba_upload;
+static gba_upload uploads[32];
+static retro_u16 upload_count, upload_bytes;
+volatile retro_u16 retro_debug[28];
 static retro_u16 map_chunk = 65535;
 
 static void dma_copy(const void *source, void *destination, retro_u32 bytes)
@@ -75,7 +81,7 @@ static void video_init(void)
     REG_DISPLAY = 1 << 7;
     dma_copy(gba_background0, (void *)0x06000000, GBA_BACKGROUND0_BYTES);
     dma_copy(gba_background1, (void *)0x06008000, GBA_BACKGROUND1_BYTES);
-    dma_copy(gba_mechanism_frames, (void *)0x06014800, GBA_MECHANISM_FRAMES_BYTES);
+
     dma_copy(gba_background_palette, (void *)0x05000000, GBA_BACKGROUND_PALETTE_BYTES);
     dma_copy(gba_actor_palette, (void *)0x05000200, GBA_ACTOR_PALETTE_BYTES);
     /* two 512x256 4bpp planes, with independent character blocks. */
@@ -98,13 +104,53 @@ static void video_init(void)
     REG_DISPLAY = (1 << 6) | (1 << 8) | (1 << 9) | (1 << 12);
 }
 
+static retro_u16 mechanism_resource(retro_u16 resource)
+{
+    retro_u16 index, colour;
+    const gba_mechanism_resource *table, *entry, *other;
+    const retro_u16 *first, *second;
+    table = (const gba_mechanism_resource *)gba_mechanism_table;
+    if (resource >= GBA_MECHANISM_FRAME_COUNT) {
+        engine.content_error = 1;
+        return 65535;
+    }
+    entry = &table[resource];
+    for (index = 0; index < upload_count; ++index) {
+        if (uploads[index].resource == resource) {
+            return uploads[index].offset >> 5;
+        }
+        other = &table[uploads[index].resource];
+        if (other->palette_first == entry->palette_first) {
+            first = (const retro_u16 *)(gba_mechanism_palettes + entry->palette_offset);
+            second = (const retro_u16 *)(gba_mechanism_palettes + other->palette_offset);
+            for (colour = 0; colour < entry->palette_count; ++colour) {
+                if (first[colour] != second[colour]) {
+                    /* distinct animated palettes need another hardware palette allocation. */
+                    engine.content_error = 2;
+                    return 65535;
+                }
+            }
+        }
+    }
+    if (upload_count >= 32 || upload_bytes + entry->bytes > 32768) {
+        engine.content_error = 3;
+        return 65535;
+    }
+    uploads[upload_count].resource = resource;
+    uploads[upload_count].offset = upload_bytes;
+    ++upload_count;
+    index = upload_bytes >> 5;
+    upload_bytes += entry->bytes;
+    return index;
+}
+
 static void mechanism_objects(retro_u16 *count)
 {
-    retro_u16 index, piece, pieces, offset;
-    retro_i16 x, y;
-    retro_u8 enabled;
+    retro_u16 index, segment, segments, resource, piece, tile, piece_x, piece_y;
+    retro_i16 x, y, origin_x, origin_y;
     const retro_mechanism_def *definition;
     const retro_mechanism_state *state;
+    const gba_mechanism_resource *entry;
     gba_object *object;
     for (index = 0; index < engine.mechanisms.count; ++index) {
         definition = &engine.mechanisms.definitions[index];
@@ -112,39 +158,63 @@ static void mechanism_objects(retro_u16 *count)
         if (!state->visible) {
             continue;
         }
-        enabled = state->enabled;
+        segments = 1;
         if (definition->kind == RETRO_MECH_LEVER) {
-            pieces = 20;
-            offset = enabled ? 160 : 0;
-        } else if (definition->kind == RETRO_MECH_BLOCK) {
-            if (definition->flags & RETRO_MECH_INVERTED) {
-                enabled = !enabled;
-            }
-            if (!enabled) {
+            resource = GBA_LEVER_FIRST + ((definition->flags & RETRO_MECH_MISSING_HANDLE) ? 32 : state->frame);
+        } else if (definition->kind == RETRO_MECH_BLOCK && engine.mechanisms.timings &&
+                   (engine.mechanisms.timings[index].flags & RETRO_TIMED_ANIMATION)) {
+            resource = GBA_BLOCK_FIRST + state->frame;
+        } else if (definition->kind == RETRO_MECH_SPIKES) {
+            resource = GBA_SPIKES_FIRST + state->frame;
+        } else if (definition->kind == RETRO_MECH_COLLAPSING) {
+            if (state->frame >= 38 || state->phase == 2) {
                 continue;
             }
-            pieces = 4;
-            offset = 320;
-        } else if (definition->kind == RETRO_MECH_SPIKES) {
-            pieces = 4;
-            offset = enabled ? 384 : 352;
+            resource = GBA_COLLAPSE_FIRST + state->frame;
+            segments = definition->bounds.width / 24;
         } else {
             continue;
         }
-        for (piece = 0; piece < pieces; ++piece) {
-            x = definition->bounds.x - frame.camera_x + (pieces == 20 ? piece % 5 : piece % 2) * 16;
-            y = definition->bounds.y - frame.camera_y + (pieces == 20 ? piece / 5 : piece / 2) * 16;
-            if (x <= -16 || x >= 240 || y <= -16 || y >= 160) {
-                continue;
+        for (segment = 0; segment < segments; ++segment) {
+            entry = &((const gba_mechanism_resource *)
+                          gba_mechanism_table)[resource +
+                                               (definition->kind == RETRO_MECH_COLLAPSING ? (segment % 4) * 38 : 0)];
+            origin_x = definition->bounds.x - frame.camera_x + segment * 24;
+            origin_y = definition->bounds.y - frame.camera_y;
+            if (definition->kind == RETRO_MECH_COLLAPSING) {
+                origin_y -= 24;
+                if (state->phase == 1) {
+                    origin_y += state->timer / 10;
+                } else if (state->timer) {
+                    origin_y += (retro_i16)((state->timer / 2 + segment) & 3) - 1;
+                }
             }
-            if (*count >= 128) {
-                engine.content_error = 1;
-                return;
+            tile = 65535;
+            piece_x = 0;
+            piece_y = 0;
+            for (piece = 0; piece < entry->columns * entry->rows; ++piece) {
+                x = origin_x + piece_x * 16;
+                y = origin_y + piece_y * 16;
+                if (++piece_x >= entry->columns) {
+                    piece_x = 0;
+                    ++piece_y;
+                }
+                if (x <= -16 || x >= 240 || y <= -16 || y >= 160) {
+                    continue;
+                }
+                if (tile == 65535) {
+                    tile = mechanism_resource(resource +
+                                              (definition->kind == RETRO_MECH_COLLAPSING ? (segment % 4) * 38 : 0));
+                }
+                if (tile == 65535 || *count >= 128) {
+                    engine.content_error = engine.content_error ? engine.content_error : 4;
+                    return;
+                }
+                object = &objects[(*count)++];
+                object->attribute0 = ((retro_u16)y & 255) | (1 << 13);
+                object->attribute1 = ((retro_u16)x & 511) | (1 << 14);
+                object->attribute2 = tile + piece * 8;
             }
-            object = &objects[(*count)++];
-            object->attribute0 = ((retro_u16)y & 255) | (1 << 13);
-            object->attribute1 = ((retro_u16)x & 511) | (1 << 14);
-            object->attribute2 = 576 + offset + piece * 8;
         }
     }
 }
@@ -159,6 +229,8 @@ static void video_prepare(void)
         objects[index].attribute0 = 1 << 9;
     }
     count = 0;
+    upload_count = 0;
+    upload_bytes = frame.count * GBA_ACTOR_FRAME_BYTES;
     for (index = 0; index < frame.count; ++index) {
         draw = &frame.draws[index];
         if (draw->frame >= GBA_ACTOR_FRAME_COUNT || draw->palette > 1) {
@@ -216,6 +288,16 @@ static void video_commit(void)
             uploaded_frame[index] = resource;
         }
     }
+    for (index = frame.count; index < RETRO_DRAW_CAPACITY; ++index) {
+        uploaded_frame[index] = 65535;
+    }
+    for (index = 0; index < upload_count; ++index) {
+        const gba_mechanism_resource *entry;
+        entry = &((const gba_mechanism_resource *)gba_mechanism_table)[uploads[index].resource];
+        dma_copy(gba_mechanism_frames + entry->offset, (void *)(0x06010000 + uploads[index].offset), entry->bytes);
+        dma_copy(gba_mechanism_palettes + entry->palette_offset, (void *)(0x05000200 + entry->palette_first * 2),
+                 entry->palette_count * 2);
+    }
     maps_commit();
     dma_copy(objects, (void *)0x07000000, sizeof(objects));
     REG16(0x04000010) = frame.camera_x & 511;
@@ -250,10 +332,24 @@ static void debug_write(void)
     {
         retro_u16 index, mask;
         mask = 0;
+        retro_debug[23] = 65535;
+        retro_debug[24] = 65535;
+        retro_debug[25] = 65535;
+        retro_debug[26] = 65535;
+        retro_debug[27] = 65535;
         retro_debug[19] = 65535;
         for (index = 0; index < engine.mechanisms.count; ++index) {
             if (engine.mechanisms.definitions[index].kind == RETRO_MECH_LEVER) {
                 retro_debug[19] = engine.mechanisms.states[index].enabled;
+                retro_debug[23] = engine.mechanisms.states[index].frame;
+            }
+            if (engine.mechanisms.definitions[index].kind == RETRO_MECH_SPIKES) {
+                retro_debug[24] = engine.mechanisms.states[index].frame;
+            }
+            if (engine.mechanisms.definitions[index].kind == RETRO_MECH_COLLAPSING && retro_debug[25] == 65535) {
+                retro_debug[25] = engine.mechanisms.states[index].phase;
+                retro_debug[26] = engine.mechanisms.states[index].active;
+                retro_debug[27] = engine.mechanisms.states[index].timer;
             }
             if (index < 16 && engine.mechanisms.states[index].enabled) {
                 mask |= (retro_u16)(1U << index);

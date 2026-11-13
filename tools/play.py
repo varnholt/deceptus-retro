@@ -47,15 +47,15 @@ class Host:
         return canvas
 
 
-def play(backend, core, library):
+def play(backend, core, library, rom=None):
     window = tk.Tk()
     window.title(f"Deceptus — {backend} | arrows move / Z jump / Up interact / Enter pause / R restart")
     canvas = tk.Label(window, borderwidth=0)
     canvas.pack()
     if backend == 'gba':
-        emulator = Emulator(core, ROOT / 'build/gba/deceptus.gba', {'mgba_use_bios': 'OFF', 'mgba_frameskip': '0'})
+        emulator = Emulator(core, rom or ROOT / 'build/gba/deceptus.gba', {'mgba_use_bios': 'OFF', 'mgba_frameskip': '0'})
     elif backend == 'snes':
-        emulator = Emulator(core, ROOT / 'build/snes/deceptus.sfc')
+        emulator = Emulator(core, rom or ROOT / 'build/snes/deceptus.sfc')
     else:
         emulator = None
     host = Host(library) if backend == "host" else None
@@ -107,6 +107,7 @@ if __name__ == "__main__":
     parser.add_argument("--backend", choices=["gba", "snes", "host"], default="gba")
     parser.add_argument("--core", type=Path)
     parser.add_argument("--library", type=Path, default=ROOT / "build/host/Debug/retro_preview.dll")
+    parser.add_argument("--rom", type=Path, help="open a particular built ROM")
     args = parser.parse_args()
     core = args.core or ROOT / ('.tools/mgba/mgba_libretro.dll' if args.backend == 'gba' else '.tools/snes9x/snes9x_libretro.dll')
-    play(args.backend, core, args.library)
+    play(args.backend, core, args.library, args.rom)

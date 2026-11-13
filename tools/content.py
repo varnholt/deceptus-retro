@@ -132,10 +132,15 @@ def inventory(data, output):
     for name in ("luanode.cpp", "levelscript.cpp"):
         api.update(re.findall(r'lua_register\([^,]+,\s*"([^"]+)"', (source / name).read_text()))
     referenced_api = sorted({call for module in modules.values() for call in module["calls"] if call in api})
+    native_groups = ('collapsing_platforms', 'on_off_blocks', 'spike_blocks', 'sensor_rects',
+                     'blocking_rects', 'checkpoints', 'levers', 'damage_rects')
+    mechanism_counts = {group: sum(level['group_counts'].get(group, 0) for level in levels) for group in native_groups}
     summary = {"levels": len(levels), "rooms": sum(level["group_counts"].get("rooms", 0) for level in levels),
         "enemy_placements": sum(active_scripts.values()), "active_enemy_scripts": dict(sorted(active_scripts.items())),
         "reachable_lua_modules": len(modules), "referenced_host_api": referenced_api,
         "compiled_callbacks": callback_support,
+        "native_mechanism_family_placements": mechanism_counts,
+        "native_mechanism_scope": "C components; import validates supported settings; not all placements are loaded or drawn",
         "full_game_supported": False,
         "remaining": ["room/resource streaming", "remaining mechanisms", "enemy behavior and animations",
                       "complete level scripts and cutscenes", "inventory and progression", "audio", "persistent save backend"]}
@@ -162,7 +167,7 @@ def crop_mechanisms(data, recipe):
     left, top, width, height = recipe["crop_pixels"]
     supported = {"checkpoints": "RETRO_MECH_CHECKPOINT", "sensor_rects": "RETRO_MECH_SENSOR",
                  "levers": "RETRO_MECH_LEVER", "blocking_rects": "RETRO_MECH_BLOCK",
-                 "on_off_blocks": "RETRO_MECH_BLOCK", "spike_blocks": "RETRO_MECH_SPIKES", "damage_rects": "RETRO_MECH_DAMAGE"}
+                 "collapsing_platforms": "RETRO_MECH_COLLAPSING", "on_off_blocks": "RETRO_MECH_BLOCK", "spike_blocks": "RETRO_MECH_SPIKES", "damage_rects": "RETRO_MECH_DAMAGE"}
     selected, unsupported = [], []
     for obj in objects:
         if obj["x"] >= left + width or obj["y"] >= top + height or obj["x"] + max(1, obj["width"]) <= left or obj["y"] + max(1, obj["height"]) <= top:
@@ -172,8 +177,13 @@ def crop_mechanisms(data, recipe):
             reason = "runtime or visual adapter not implemented"
         elif obj["rotation"] or obj["shape"] != "rectangle":
             reason = "dynamic mechanisms currently require unrotated rectangles"
-        elif obj["properties"].get("mode", "lever") != "lever":
-            reason = "interval mechanisms are not implemented"
+        elif obj["properties"].get("mode", "lever") not in ("lever", "interval"):
+            reason = "unknown mechanism mode"
+        elif obj["group"] == "collapsing_platforms" and (obj["width"] % 24 or obj["height"] != 24):
+            reason = "collapsing platform requires 24px segments and a 24px collision height"
+        elif obj["group"] == "collapsing_platforms" and (float(obj["properties"].get("destruction_speed", 30)) != 30 or
+                                                        float(obj["properties"].get("fall_speed", 6)) != 6):
+            reason = "custom collapse visual speeds are not implemented"
         if reason:
             unsupported.append({"id": obj["id"], "name": obj["name"], "group": obj["group"], "reason": reason})
             continue
@@ -201,8 +211,22 @@ def crop_mechanisms(data, recipe):
         value = int(props.get("damage", 100)) if obj["group"] in ("damage_rects", "spike_blocks") else int(props.get("index", 0))
         if not 0 <= value <= 65535:
             raise ValueError(f'mechanism {obj["id"]}: value {value} exceeds the supported unsigned 16-bit range')
+        animated = obj['group'] in ('levers', 'on_off_blocks', 'spike_blocks')
+        interval = props.get('mode', 'lever') == 'interval'
+        if interval and obj['group'] not in ('on_off_blocks', 'spike_blocks'):
+            raise ValueError(f'mechanism {obj["id"]}: interval mode is invalid for this kind')
+        def ticks(value, scale=1):
+            result = round(float(value) * scale * 60)
+            if not 0 <= result <= 65534:
+                raise ValueError(f'mechanism {obj["id"]}: timer exceeds the 16-bit tick budget')
+            return result
+        timing = [max(1, ticks(props.get('time_on_ms', 4000), .001)),
+                  max(1, ticks(props.get('time_off_ms', 3000), .001)),
+                  ticks(props.get('time_to_collapse_s', 1)), ticks(props.get('time_to_respawn_s', 4)),
+                  ticks(props.get('fade_in_duration_s', 1)),
+                  int(animated) | (2 if interval else 0) | (4 if boolean(props.get('collapse_once_touched', False)) else 0)]
         definitions.append({"source_id": obj["id"], "name": obj["name"], "kind": supported[obj["group"]],
-                            "bounds": bounds, "enabled": int(boolean(props.get("enabled", True))), "flags": flags,
+                            "bounds": bounds, "timing": timing, "enabled": int(boolean(props.get("enabled", True))), "flags": flags,
                             "value": value, "target_first": first, "target_count": len(targets) - first,
                             "visual_status": "static background" if obj["group"] == "checkpoints" else "not implemented"})
     return definitions, targets, unsupported

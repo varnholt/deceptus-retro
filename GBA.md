@@ -20,8 +20,9 @@ python tools/play.py
 
 The current workspace already has these tools and a built
 `build/gba/deceptus.gba`. `build/gba/deceptus.elf` retains symbols for debugging.
-The output is a 512KiB ROM with a valid header, checksum and ARM entry point.
-The size can grow automatically up to the 32MiB cartridge address limit.
+The ROM is padded to at least 512KiB with a valid header, checksum and ARM
+entry point. It is currently 1MiB with the animation library. The size can grow
+automatically up to the 32MiB cartridge address limit.
 
 Use `--data PATH` for a different main-engine checkout. `--clang`, `--linker`
 and `--objcopy` accept executable paths. After configuring the native CMake
@@ -50,16 +51,20 @@ pixel positions and sprite dimensions stay at 1:1; no dithering is enabled.
 - The current 768x224 background uses 1,621 unique 4bpp patterns. Its measured
   palette error is recorded in `budget.json`; about 96.7% of pixels retain their
   exact source RGB555 colour.
-- Actors and mechanisms share an 8bpp object palette. All 201 opaque RGB555
-  colours are kept without palette reduction. This scene has no stand-in patrol
-  or gold portal.
-- Each 32x48 logical frame becomes six 16x16 objects. Visible frames are copied
-  to object VRAM when their animation/palette changes. The 12-draw capacity
-  uses at most 18,432 bytes of object VRAM.
+- The player keeps all 48 opaque RGB555 source colours. Mechanism frames use
+  separate palette ranges, uploaded with their graphics. No mechanism colour
+  reduction or sprite resampling is performed.
+- The generated ROM library contains 257 original frames: 33 lever, 40 spike,
+  32 on/off block and 152 collapsing-platform frames. Only visible resources
+  are uploaded; repeated instances share their current frame in OBJ VRAM.
+- Visible actor slots are followed by mechanism resources in the 32KiB OBJ
+  area. Bounds checks reject excess graphics or OAM objects. Incompatible
+  simultaneous animated palettes within one family fail explicitly; general
+  per-instance palette allocation remains work for larger scenes.
 
 Generated output stays in `assets/generated/gba/`, separate from SNES output.
 `tools/world_export.py` supplies both targets with the same collision and
-mechanism definitions. GBA uses `assets/rooms/gba-lever.json` and imports into
+mechanism definitions. GBA uses `assets/rooms/gba-lever.json` or `gba-platforms.json` and imports into
 `assets/source/gba/`; SNES retains its clock-room recipe.
 
 ## Hardware layout
@@ -70,8 +75,7 @@ mechanism definitions. GBA uses `assets/rooms/gba-lever.json` and imports into
 | BG VRAM `0x06008000` | Overflow patterns in character block 2 |
 | BG VRAM `0x0600e000` | Primary 64x32 map in screen blocks 28–29 |
 | BG VRAM `0x0600f000` | Overflow 64x32 map in screen blocks 30–31 |
-| OBJ VRAM `0x06010000` | 18,432 bytes reserved for actor frame slots |
-| OBJ VRAM `0x06014800` | 13,312 bytes of original mechanism endpoint sprites |
+| OBJ VRAM `0x06010000` | Visible actor frames, then deduplicated mechanism resources; 32KiB total |
 | Palette RAM `0x05000000` | 256 background entries |
 | Palette RAM `0x05000200` | Original actor and mechanism colours |
 
@@ -94,9 +98,31 @@ raised floor; the same route is safe with traps retracted and lethal with them
 extended. **R** restores the source states. Holding Up toggles only once.
 
 The original links drive C mechanism states directly; this chain does not need
-Lua. The full level Lua event dispatch is still not connected. Lever and trap
-sprites show original endpoint frames immediately; the original transition
-animation, timing and enabled-lever idle animation remain to port.
+Lua. The full level Lua event dispatch is still not connected. Lever travel and
+idle frames, the one-second interaction cooldown, 40fps trap animation, and the
+deadly frame range are implemented in portable C. Rapid switch requests use a
+bounded eight-entry queue; overflowing requests fail without a partial lever
+chain or Lua callback write.
+
+A second original area demonstrates collapsing platforms:
+
+```powershell
+python tools/build_gba.py --scene platforms
+python tools/gba_emulator.py --scene platforms
+python tools/play.py --rom build/gba/deceptus-platforms.gba
+```
+
+Stand on a platform for just over one second: it shakes, crumbles and stops
+supporting the player. It returns after the original respawn and fade delay,
+provided the player is clear. Restart restores source states. Both scene ROMs
+are retained as `deceptus-lever.gba` and `deceptus-platforms.gba`; the last build
+also becomes `deceptus.gba`. Build `--scene lever` to restore the default scene.
+
+Collapse contact/touched rules, collision and timers are ported. Visual shake
+is deterministic, segment destruction uses the base 30fps/6px-per-second speeds,
+and the source's random per-segment multipliers are not reproduced. Returning
+platforms remain hidden during the fade delay; gradual alpha fade is unfinished.
+Custom destruction/fall speeds are rejected during import.
 
 The background is paged in 256px screen blocks as the camera moves across this
 768px area; it does not load neighbouring rooms. The mGBA route verifies source
@@ -106,7 +132,9 @@ Reports and screenshots are in `artifacts/gba-*`.
 
 Native tests reconstruct the complete GBA background from packed tiles, flips,
 palette attributes and both maps. They also decode all 19 actor frames and
-compare their opaque RGB555 pixels against the lossless import. Shared engine
+compare their opaque RGB555 pixels against the lossless import. All 257
+mechanism frames are decoded and checked against their source atlas pixels;
+the ROM check also compares an actual middle lever frame and its palette. Shared engine
 and source-Lua differential tests still run. The SNES ROM route passes after the
 camera/exporter changes.
 

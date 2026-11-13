@@ -91,6 +91,35 @@ class ContentTests(unittest.TestCase):
         self.assertEqual(definitions[0]['value'], 100)
         self.assertEqual((targets, unsupported), ([], []))
 
+    def test_collapse_settings_are_converted_to_bounded_ticks(self):
+        obj = dict(id=78, name='', group='collapsing_platforms', x=8, y=8, width=24, height=24,
+                   rotation=0, shape='rectangle', properties={'collapse_once_touched': True,
+                       'time_to_collapse_s': .25, 'time_to_respawn_s': 3})
+        with patch('content.map_objects', return_value=(None, [obj])):
+            definitions, _, unsupported = crop_mechanisms(FIXTURES, {'map': 'unused', 'crop_pixels': [0, 0, 256, 224]})
+        self.assertEqual(definitions[0]['kind'], 'RETRO_MECH_COLLAPSING')
+        self.assertEqual(definitions[0]['timing'][2:], [15, 180, 60, 4])
+        self.assertEqual(unsupported, [])
+        obj['properties']['time_to_respawn_s'] = 2000
+        with patch('content.map_objects', return_value=(None, [obj])):
+            with self.assertRaisesRegex(ValueError, 'timer exceeds'):
+                crop_mechanisms(FIXTURES, {'map': 'unused', 'crop_pixels': [0, 0, 256, 224]})
+
+    def test_interval_mode_import_and_unknown_modes(self):
+        obj = dict(id=2, name='', group='on_off_blocks', x=8, y=8, width=24, height=24,
+                   rotation=0, shape='rectangle', properties={'mode': 'interval', 'time_on_ms': 500,
+                   'time_off_ms': 1500, 'inverted': 'true'})
+        with patch('content.map_objects', return_value=(None, [obj])):
+            definitions, _, _ = crop_mechanisms(FIXTURES, {'map': 'unused', 'crop_pixels': [0, 0, 256, 224]})
+        self.assertEqual(definitions[0]['timing'][:2], [30, 90])
+        self.assertEqual(definitions[0]['timing'][-1], 3)
+        self.assertEqual(definitions[0]['flags'], 1)
+        obj['properties']['mode'] = 'unsupported'
+        with patch('content.map_objects', return_value=(None, [obj])):
+            definitions, _, unsupported = crop_mechanisms(FIXTURES, {'map': 'unused', 'crop_pixels': [0, 0, 256, 224]})
+        self.assertFalse(definitions)
+        self.assertIn('unknown mechanism mode', unsupported[0]['reason'])
+
     def test_typed_properties_and_group_offsets_survive_import(self):
         _, objects = map_objects(FIXTURES / "typed.tmx")
         self.assertEqual((objects[0]["x"], objects[0]["y"]), (40, 40))

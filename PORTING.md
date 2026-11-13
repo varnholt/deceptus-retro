@@ -26,9 +26,9 @@ copies of the game. Unused script files are not mistaken for placed enemies.
 | Original system | Port implementation | Current state |
 | --- | --- | --- |
 | Tiled placements/properties | Build-time object catalog and compact C definitions | Full catalog; supported objects in the prototype crop are imported |
-| C++ mechanisms | Reusable C components with source ids and event queues | Rectangle checkpoints, sensors, levers, blocks and damage; GBA lever/spike chain playable |
+| C++ mechanisms | Reusable C components with source ids and event queues | Checkpoints, sensors, levers, blocks, damage, timed spikes and collapsing platforms; two GBA areas playable |
 | Lua mechanism callbacks | Parse source, resolve selectors, compile bounded action programs | Two original callbacks verified; complete scripts unsupported |
-| Lua enemies | Source-derived behavior programs plus native movement/animation/weapon services | Inventory only; all 16 placed types remain to port |
+| Lua enemies | Native C state machines plus shared movement/animation/weapon services | Inventory only; all 16 placed types remain to port |
 | Box2D | Fixed-point character/world collision and specific analytical mechanisms | Grid collision and dynamic rectangle blocks; slopes/joints/water incomplete |
 | Level/cutscene logic | Persistent flags, timed actions, dialogue, inventory and event dispatch | Not implemented |
 | Graphics | Lossless import followed by target-specific palette/tile packing | GBA and SNES prototypes; original artwork remains 1:1 |
@@ -37,6 +37,35 @@ copies of the game. Unused script files are not mistaken for placed enemies.
 The reusable C runtime does not include SFML, Lua or a console SDK. Backend
 registers stay in platform code. The GBA build uses the original content import
 and its own graphics encoder, rather than reuse the SNES-reduced images.
+
+## Native mechanism batch
+
+Reusable behavior is implemented in C, while Tiled remains authoritative for
+placements, names, links, initial states and timing properties. The current
+source placement counts for these families are:
+
+| Family | Placements | Ported behavior |
+| --- | ---: | --- |
+| Collapsing platforms | 44 | Foot contact, continued countdown once touched, collapse, blocked respawn, restore delay and dynamic collision |
+| On/off blocks | 30 | Linked/interval control, inverted state, bounded transition queue and animation/collision state |
+| Spike blocks | 12 | Linked/interval control, original animation and damage on frames 29–35 |
+| Sensors | 12 | Rectangle enter/leave events |
+| Blocking rectangles | 6 | Enabled/inverted dynamic collision |
+| Checkpoints | 6 | Source identity and respawn activation |
+| Levers | 6 | Two-state links, missing-handle restriction, travel/idle frames and interaction cooldown |
+| Damage rectangles | 3 | Configured contact damage |
+
+Counts describe source placements in supported families, not completed coverage
+of every room. The importer rejects unsupported modes, geometry and timer or
+resource budgets. Moving platforms, ropes, crushers, doors, narrative triggers
+and the remaining systems still require their own implementations. The GBA
+collapsing-platform route verifies an original placement through standing,
+collapse, falling, return and restart. Native tests cover interval/inverted
+blocks, queue saturation, deadly animation boundaries and touched-only rules.
+
+Visual differences remain: deterministic collapse shake/base destruction speeds,
+and no gradual alpha fade during return. Full level Lua dispatch and cross-room
+state persistence are separate from these reusable components.
 
 ## Lua stays upstream
 
@@ -103,8 +132,8 @@ in `assets/source/mechanisms.json`.
    than only isolated component fixtures.
 3. **Real enemies and combat.** Replace the demo patrol with original placements,
    sprites and behavior, starting with rat and simpler patrol types. Expand the
-   compiler/runtime for the actual script constructs used by each type. Compare
-   actions against original Lua traces; keep unsupported calls visible.
+   native movement, animation and projectile services needed by each type. Compare
+   C state transitions and actions against original Lua traces; keep unsupported calls visible.
 4. **Player abilities and traversal.** Port slopes, water/swimming, wall movement,
    weapons, ropes and the other abilities the level geometry requires. Match
    the original progression gates and tune against recorded input.
@@ -121,8 +150,8 @@ in `assets/source/mechanisms.json`.
 
 GBA now demonstrates original lever 113 and its 12 spike-block targets in a
 768x224 area, with source sprites, safe/lethal traversal and restart. Its
-256px background paging is limited to this area. Transition animations and
-full level Lua dispatch are unfinished; whole-room resource loading remains
+256px background paging is limited to this area. Lever/spike animation and a second area of collapsing platforms are playable.
+Full level Lua dispatch remains unfinished; whole-room resource loading remains
 the dependency for level-wide enemy and progression chains.
 
 ## Commands and truthful build status

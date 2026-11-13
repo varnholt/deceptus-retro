@@ -45,8 +45,9 @@ The GBA scene starts beside an original lever. Press **Up** to retract its
 linked spike traps, walk right, then jump onto the raised floor. With the traps
 extended, that route damages the player and returns to spawn. **R** restores
 the original lever and trap states. All 12 target links come from the main map.
-The mechanism sprites retain their original pixels; transitions are currently
-instant, with original animation timing still to port.
+The mechanism sprites retain their original pixels and now animate in C,
+including the lever cooldown and deadly trap frames. A second original area
+demonstrates collapsing platforms; see [GBA.md](GBA.md) for scene commands.
 
 The SNES scene retains the clock checkpoint, stand-in patrol and gold portal.
 State is held in RAM only; neither prototype loads a second room.
@@ -170,8 +171,8 @@ for measured colour error and exact RGB555 pixel coverage.
 
 The GBA converter independently imports a 768x224 mechanism area selected by
 `assets/rooms/gba-lever.json`, into `assets/source/gba/`. It uses 16 background
-palette banks and 8bpp object frames, preserving all 201 opaque RGB555 actor
-and mechanism colours in the current import. It does not read the reduced SNES PNG. Its
+palette banks and 8bpp object frames. Original actor colours and individual
+mechanism-frame colours are preserved through streamed palettes. It does not read the reduced SNES PNG. Its
 graphics, maps, colour report and budget are in `assets/generated/gba/`.
 
 The content tools also export supported rectangle mechanisms from the original

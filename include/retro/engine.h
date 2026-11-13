@@ -51,6 +51,7 @@ typedef struct retro_room {
     retro_u16 mechanism_count;
     const retro_u16 *mechanism_targets;
     retro_u16 mechanism_target_count;
+    const retro_mechanism_timing *mechanism_timings;
 } retro_room;
 
 typedef struct retro_entity {

@@ -1,5 +1,6 @@
 from pathlib import Path
 import struct
+import json
 import sys
 import unittest
 
@@ -79,36 +80,42 @@ class GbaGraphicsTests(unittest.TestCase):
         self.assertEqual(payload[0xac:0xb0], b'DCPT')
     def test_mechanism_frames_preserve_source_pixels(self):
         source = ROOT.parent / 'deceptus_engine/data/sprites'
-        if not (source / 'levers.png').exists() or not (GENERATED / 'mechanisms.bin').exists():
+        if not (source / 'levers.png').exists() or not (GENERATED / 'mechanisms-frames.json').exists():
             self.skipTest('original assets and a GBA build are required')
-        lever = Image.open(source / 'levers.png').convert('RGBA')
-        block = Image.open(source / 'on_off_block.png').convert('RGBA')
-        spikes = Image.open(source / 'enemy_spikeblock.png').convert('RGBA')
-        images = [lever.crop((0, 0, 72, 72)), lever.crop((0, 144, 72, 216)),
-                  block.crop((0, 24, 24, 48)), spikes.crop((168, 96, 192, 120)),
-                  spikes.crop((0, 96, 24, 120))]
-        palette = struct.unpack('<256H', (GENERATED / 'actors.pal').read_bytes())
+        manifest = json.loads((GENERATED / 'mechanisms-frames.json').read_text())
         graphics = (GENERATED / 'mechanisms.bin').read_bytes()
-        offset = 0
-        for image in images:
-            padded = Image.new('RGBA', (80, 64) if image.width == 72 else (32, 32))
-            padded.alpha_composite(image)
+        palettes = (GENERATED / 'mechanisms.pal').read_bytes()
+        table = (GENERATED / 'mechanisms.tbl').read_bytes()
+        self.assertEqual(len(manifest), 257)
+        atlases = {}
+        for resource, frame in enumerate(manifest):
+            if frame['source'] not in atlases:
+                atlases[frame['source']] = Image.open(source / frame['source']).convert('RGBA')
+            x, y, width, height = frame['source_rect']
+            padded = Image.new('RGBA', frame['size'])
+            padded.alpha_composite(atlases[frame['source']].crop((x, y, x + width, y + height)))
+            count, first = frame['palette_count'], frame['palette_first']
+            palette = struct.unpack_from(f'<{count}H', palettes, frame['palette_offset'])
+            descriptor = struct.unpack_from('<IIH4B2x', table, resource * 16)
+            self.assertEqual(descriptor, (frame['offset'], frame['palette_offset'], frame['bytes'],
+                                         padded.width // 16, padded.height // 16, first, count))
+            offset = frame['offset']
             for top in range(0, padded.height, 16):
                 for left in range(0, padded.width, 16):
                     for tile_y in range(2):
                         for tile_x in range(2):
-                            for y in range(8):
-                                for x in range(8):
-                                    red, green, blue, alpha = padded.getpixel((left + tile_x * 8 + x, top + tile_y * 8 + y))
+                            for pixel_y in range(8):
+                                for pixel_x in range(8):
+                                    red, green, blue, alpha = padded.getpixel((left + tile_x * 8 + pixel_x, top + tile_y * 8 + pixel_y))
                                     index = graphics[offset]
                                     offset += 1
                                     if alpha >= 128:
-                                        self.assertNotEqual(index, 0)
-                                        self.assertEqual(palette[index], (red >> 3) | ((green >> 3) << 5) | ((blue >> 3) << 10))
+                                        self.assertGreaterEqual(index, first)
+                                        self.assertLess(index, first + count)
+                                        self.assertEqual(palette[index - first], (red >> 3) | ((green >> 3) << 5) | ((blue >> 3) << 10))
                                     else:
                                         self.assertEqual(index, 0)
-        self.assertEqual(offset, len(graphics))
-        self.assertLessEqual(offset + 12 * 1536, 32768)
+            self.assertEqual(offset, frame['offset'] + frame['bytes'])
 
 
 

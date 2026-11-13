@@ -31,11 +31,15 @@ def export_world(source, output, recipe):
                          f"{definition['target_count']}, {definition['value']}, {definition['kind']}, "
                          f"{definition['enabled']}, {definition['flags']}}},")
         lines += ['};', '']
+    if definitions:
+        lines += ['static const retro_mechanism_timing room_timings[] = {']
+        lines += ['    {' + ', '.join(map(str, definition.get('timing', [0] * 6))) + '},' for definition in definitions]
+        lines += ['};', '']
     if targets:
         lines += ['static const retro_u16 room_targets[] = {' + ', '.join(map(str, targets)) + '};', '']
     coordinates = recipe["spawn"] + recipe["patrol"] + recipe["door"]
     lines += ['const retro_room deceptus_room = {', f'    room_collision, {columns}, {rows}, ' + ', '.join(map(str, coordinates)) + ',',
-              f"    {'room_mechanisms' if definitions else '0'}, {len(definitions)}, {'room_targets' if targets else '0'}, {len(targets)}",
+              f"    {'room_mechanisms' if definitions else '0'}, {len(definitions)}, {'room_targets' if targets else '0'}, {len(targets)}, {'room_timings' if definitions else '0'}",
               '};', '']
     (output / "room.c").write_text('\n'.join(lines))
     return len(collision)

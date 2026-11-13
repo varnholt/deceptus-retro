@@ -64,97 +64,119 @@ def compile_background(image, output):
     return len(patterns), metrics
 
 
-def compile_actors(image, output, mechanisms=()):
+def compile_actors(image, output):
     rgba = np.asarray(image.convert('RGBA'), dtype=np.uint8)
     opaque = rgba[:, :, 3] >= 128
     rgb5 = rgba[:, :, :3] >> 3
-    colours_set = set(map(tuple, rgb5[opaque].tolist()))
-    for mechanism in mechanisms:
-        pixels = np.asarray(mechanism)
-        colours_set.update(map(tuple, (pixels[:, :, :3][pixels[:, :, 3] >= 128] >> 3).tolist()))
-    colours = sorted(colours_set)
-    if len(colours) > 255:
-        raise ValueError("actor and mechanism colours exceed the 255-colour OBJ palette")
+    colours = sorted(set(map(tuple, rgb5[opaque].tolist())))
+    if len(colours) > 51:
+        raise ValueError('actor palette exceeds its 51-colour reservation')
     lookup = {colour: index + 1 for index, colour in enumerate(colours)}
     indices = np.zeros(opaque.shape, dtype=np.uint8)
-    for top in range(image.height):
-        for left in range(image.width):
-            if opaque[top, left]:
-                indices[top, left] = lookup[tuple(rgb5[top, left])]
+    for top, left in zip(*np.where(opaque)):
+        indices[top, left] = lookup[tuple(rgb5[top, left])]
     palette = [0] * 256
     for index, (red, green, blue) in enumerate(colours, start=1):
         palette[index] = red | (green << 5) | (blue << 10)
-
     (output / 'actors.pal').write_bytes(struct.pack('<256H', *palette))
     frames = bytearray()
-    # each frame is six 16x16 hardware objects, each containing four 8x8 tiles.
     for _variant in range(2):
         for frame in range(19):
             frame_left, frame_top = (frame % 4) * 32, (frame // 4) * 48
-            for piece in range(6):
-                piece_left, piece_top = frame_left + (piece % 2) * 16, frame_top + (piece // 2) * 16
-                for tile_y in range(2):
-                    for tile_x in range(2):
-                        tile = indices[piece_top + tile_y * 8:piece_top + tile_y * 8 + 8,
-                                       piece_left + tile_x * 8:piece_left + tile_x * 8 + 8].copy()
-                        # the mechanism scene has no prototype tinted patrol.
-                        frames.extend(tile.tobytes())
+            frames.extend(pack_objects(indices[frame_top:frame_top + 48, frame_left:frame_left + 32]))
     (output / 'actors.bin').write_bytes(frames)
-    graphics = bytearray()
-    for mechanism in mechanisms:
-        pixels = np.asarray(mechanism)
-        # 16x16 pieces in row order, four hardware tiles per piece.
-        for top in range(0, mechanism.height, 16):
-            for left in range(0, mechanism.width, 16):
-                for tile_y in range(2):
-                    for tile_x in range(2):
-                        for y in range(8):
-                            for x in range(8):
-                                pixel = pixels[top + tile_y * 8 + y, left + tile_x * 8 + x]
-                                graphics.append(lookup[tuple(pixel[:3] >> 3)] if pixel[3] >= 128 else 0)
-    if len(graphics) > 32768 - 12 * 1536:
-        raise ValueError('mechanism graphics exceed remaining OBJ VRAM')
-    (output / 'mechanisms.bin').write_bytes(graphics)
     return len(colours)
 
 
-def compile_assets(data):
+def pack_objects(indices):
+    graphics = bytearray()
+    for top in range(0, indices.shape[0], 16):
+        for left in range(0, indices.shape[1], 16):
+            for tile_y in range(2):
+                for tile_x in range(2):
+                    graphics.extend(indices[top + tile_y * 8:top + tile_y * 8 + 8,
+                                            left + tile_x * 8:left + tile_x * 8 + 8].tobytes())
+    return graphics
+
+
+def compile_mechanisms(data, output):
+    graphics, palettes, descriptors, manifest = bytearray(), bytearray(), bytearray(), []
+    specifications = [('levers.png', 72, 72, 11, 33, 52, 136, False),
+                      ('enemy_spikeblock.png', 24, 24, 8, 40, 188, 12, False),
+                      ('on_off_block.png', 24, 24, 8, 32, 200, 12, True),
+                      ('collapsing_platform.png', 24, 72, 38, 152, 212, 44, True)]
+    for filename, width, height, columns, count, palette_first, palette_count, shared in specifications:
+        atlas = Image.open(data / 'sprites' / filename).convert('RGBA')
+        images = [atlas.crop(((index % columns) * width, (index // columns) * height,
+                              (index % columns + 1) * width, (index // columns + 1) * height)) for index in range(count)]
+        common = set()
+        if shared:
+            for image in images:
+                pixels = np.asarray(image)
+                common.update(map(tuple, (pixels[:, :, :3][pixels[:, :, 3] >= 128] >> 3).tolist()))
+        for index, image in enumerate(images):
+            padded = Image.new('RGBA', (((width + 15) // 16) * 16, ((height + 15) // 16) * 16))
+            padded.alpha_composite(image)
+            pixels = np.asarray(padded)
+            opaque = pixels[:, :, 3] >= 128
+            rgb5 = pixels[:, :, :3] >> 3
+            colours = sorted(common if shared else set(map(tuple, rgb5[opaque].tolist())))
+            if len(colours) > palette_count:
+                raise ValueError(f'{filename} frame {index}: {len(colours)} colours exceed {palette_count}')
+            lookup = {colour: palette_first + slot for slot, colour in enumerate(colours)}
+            indices = np.zeros(opaque.shape, dtype=np.uint8)
+            for top, left in zip(*np.where(opaque)):
+                indices[top, left] = lookup[tuple(rgb5[top, left])]
+            packed = pack_objects(indices)
+            palette = [red | (green << 5) | (blue << 10) for red, green, blue in colours]
+            palette += [0] * (palette_count - len(palette))
+            descriptors.extend(struct.pack('<IIH4B2x', len(graphics), len(palettes), len(packed),
+                                           padded.width // 16, padded.height // 16, palette_first, palette_count))
+            manifest.append(dict(source=filename, frame=index, source_rect=[(index % columns) * width,
+                                 (index // columns) * height, width, height], size=list(padded.size),
+                                 offset=len(graphics), palette_offset=len(palettes), bytes=len(packed),
+                                 palette_first=palette_first, palette_count=palette_count))
+            graphics.extend(packed)
+            palettes.extend(struct.pack(f'<{palette_count}H', *palette))
+    (output / 'mechanisms.bin').write_bytes(graphics)
+    (output / 'mechanisms.pal').write_bytes(palettes)
+    (output / 'mechanisms.tbl').write_bytes(descriptors)
+    (output / 'mechanisms-frames.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    return len(manifest)
+
+
+def compile_assets(data, scene="lever"):
     source = SOURCE / "gba"
-    recipe_path = ROOT / "assets/rooms/gba-lever.json"
+    recipe_path = ROOT / f"assets/rooms/gba-{scene}.json"
     import_deceptus(data, recipe_path, source)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     recipe = json.loads((recipe_path).read_text())
     room = Image.open(source / 'catacombs.png').convert('RGB')
     patterns, metrics = compile_background(room, OUTPUT)
-    lever = Image.open(data / 'sprites/levers.png').convert('RGBA')
-    block = Image.open(data / 'sprites/on_off_block.png').convert('RGBA')
-    spikes = Image.open(data / 'sprites/enemy_spikeblock.png').convert('RGBA')
-    mechanisms = []
-    for image in (lever.crop((0, 0, 72, 72)), lever.crop((0, 144, 72, 216)),
-                  block.crop((0, 24, 24, 48)), spikes.crop((168, 96, 192, 120)),
-                  spikes.crop((0, 96, 24, 120))):
-        padded = Image.new('RGBA', (80, 64) if image.width == 72 else (32, 32))
-        padded.alpha_composite(image)
-        mechanisms.append(padded)
-    actor_colours = compile_actors(Image.open(source / 'actors.png'), OUTPUT, mechanisms)
+    actor_colours = compile_actors(Image.open(source / 'actors.png'), OUTPUT)
+    mechanism_frames = compile_mechanisms(data, OUTPUT)
     collision_bytes = export_world(source, OUTPUT, recipe)
     resources = [('gba_background0', 'background0.bin'), ('gba_background1', 'background1.bin'),
                  ('gba_map0', 'map0.bin'), ('gba_map1', 'map1.bin'),
                  ('gba_background_palette', 'background.pal'), ('gba_actor_palette', 'actors.pal'),
-                 ('gba_actor_frames', 'actors.bin'), ('gba_mechanism_frames', 'mechanisms.bin')]
+                 ('gba_actor_frames', 'actors.bin'), ('gba_mechanism_frames', 'mechanisms.bin'),
+                 ('gba_mechanism_palettes', 'mechanisms.pal'), ('gba_mechanism_table', 'mechanisms.tbl')]
     assembly = ['.section .rodata.gba_assets,"a",%progbits']
     header = ['#ifndef GBA_ASSETS_H', '#define GBA_ASSETS_H', '#include "retro/types.h"']
     for label, filename in resources:
         assembly += ['.balign 4', f'.global {label}', f'{label}:', f'.incbin "{(OUTPUT / filename).as_posix()}"']
         header += [f'extern const retro_u8 {label}[];', f'#define {label.upper()}_BYTES {(OUTPUT / filename).stat().st_size}']
-    header += ['#define GBA_ACTOR_FRAME_BYTES 1536', '#define GBA_ACTOR_FRAME_COUNT 19', '#endif', '']
+    header += ['typedef struct gba_mechanism_resource { retro_u32 offset; retro_u32 palette_offset; retro_u16 bytes; retro_u8 columns, rows, palette_first, palette_count; retro_u16 reserved; } gba_mechanism_resource;',
+               '#define GBA_LEVER_FIRST 0', '#define GBA_SPIKES_FIRST 33', '#define GBA_BLOCK_FIRST 73', '#define GBA_COLLAPSE_FIRST 105',
+               f'#define GBA_MECHANISM_FRAME_COUNT {mechanism_frames}',
+               '#define GBA_ACTOR_FRAME_BYTES 1536', '#define GBA_ACTOR_FRAME_COUNT 19', '#endif', '']
     (OUTPUT / 'data.s').write_text('\n'.join(assembly) + '\n')
     (OUTPUT / 'gba_assets.h').write_text('\n'.join(header))
-    report = {'source': 'lossless original-engine import', 'scale': '1:1', 'dithering': False,
+    report = {'source': 'lossless original-engine import', 'scene': scene, 'scale': '1:1', 'dithering': False,
               'background_patterns': patterns, 'background_palette_banks': 16, 'background_fidelity': metrics,
               'actor_opaque_rgb555_colours': actor_colours, 'actor_palette_reduction': False,
               'mechanism_frame_rom_bytes': (OUTPUT / 'mechanisms.bin').stat().st_size,
-              'mechanism_transitions': 'instant endpoint states; original transition timing not ported',
+              'mechanism_transitions': '60Hz C timers; streamed original source animation frames',
               'background_screen_chunks': room.width // 256,
               'actor_frame_rom_bytes': (OUTPUT / 'actors.bin').stat().st_size,
               'actor_vram_bytes_per_visible_actor': 1536, 'collision_rom_bytes': collision_bytes,
@@ -166,5 +188,6 @@ def compile_assets(data):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data', type=Path, default=ROOT.parent / 'deceptus_engine/data')
+    parser.add_argument("--scene", choices=["lever", "platforms"], default="lever")
     args = parser.parse_args()
-    compile_assets(args.data)
+    compile_assets(args.data, args.scene)

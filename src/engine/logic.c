@@ -25,6 +25,14 @@ retro_u8 retro_logic_execute(retro_mechanism_set *set, const retro_u8 *code, ret
                 return RETRO_LOGIC_BAD_CODE;
             }
             for (index = 0; index < set->count; ++index) {
+                if (set->timings && (set->timings[index].flags & RETRO_TIMED_ANIMATION) &&
+                    (set->definitions[index].kind == RETRO_MECH_BLOCK ||
+                     set->definitions[index].kind == RETRO_MECH_SPIKES) &&
+                    enabled[index] != set->states[index].enabled && set->states[index].pending_count >= 8) {
+                    return RETRO_LOGIC_BUDGET;
+                }
+            }
+            for (index = 0; index < set->count; ++index) {
                 retro_mechanism_enable(set, set->definitions[index].source_id, enabled[index]);
                 set->states[index].visible = visible[index];
             }

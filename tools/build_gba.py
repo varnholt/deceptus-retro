@@ -41,7 +41,7 @@ def fix_header(rom, reference):
     rom.write_bytes(payload)
 
 
-def build(data, clang='clang', linker='ld.lld', objcopy='llvm-objcopy', full_game=False):
+def build(data, clang='clang', linker='ld.lld', objcopy='llvm-objcopy', full_game=False, scene='lever'):
     for executable in (clang, linker, objcopy):
         if not shutil.which(str(executable)):
             raise SystemExit(f'{executable} not found; install LLVM or supply its executable path')
@@ -55,7 +55,7 @@ def build(data, clang='clang', linker='ld.lld', objcopy='llvm-objcopy', full_gam
             raise SystemExit('Full-game content support is incomplete; see build/content/summary.json')
     folder = ROOT / 'build/gba'
     folder.mkdir(parents=True, exist_ok=True)
-    run([sys.executable, ROOT / 'tools/gba_assets.py', '--data', data], ROOT)
+    run([sys.executable, ROOT / 'tools/gba_assets.py', '--data', data, '--scene', scene], ROOT)
     platform = ROOT / 'src/platform/gba'
     flags = ['--target=arm-none-eabi', '-mcpu=arm7tdmi', '-mthumb', '-O2', '-ffreestanding', '-fno-builtin',
              '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-ffunction-sections', '-fdata-sections',
@@ -79,10 +79,11 @@ def build(data, clang='clang', linker='ld.lld', objcopy='llvm-objcopy', full_gam
     rom = folder / 'deceptus.gba'
     run([objcopy, '-O', 'binary', elf, rom], folder)
     fix_header(rom, reference)
+    shutil.copyfile(rom, folder / f"deceptus-{scene}.gba")
     (folder / 'build.json').write_text(json.dumps({'compiler': subprocess.check_output([clang, '--version'], text=True).splitlines()[0],
         'rom_bytes': rom.stat().st_size, 'rom_sha256': hashlib.sha256(rom.read_bytes()).hexdigest(),
         'header_reference_sha256': hashlib.sha256(reference.read_bytes()).hexdigest(),
-        'full_game': False}, indent=2) + '\n')
+        'full_game': False, 'scene': scene}, indent=2) + '\n')
     print(f'ROM: {rom}')
 
 
@@ -93,5 +94,6 @@ if __name__ == '__main__':
     parser.add_argument('--linker', default='ld.lld')
     parser.add_argument('--objcopy', default='llvm-objcopy')
     parser.add_argument('--full-game', action='store_true')
+    parser.add_argument("--scene", choices=["lever", "platforms"], default="lever")
     args = parser.parse_args()
-    build(args.data.resolve(), args.clang, args.linker, args.objcopy, args.full_game)
+    build(args.data.resolve(), args.clang, args.linker, args.objcopy, args.full_game, args.scene)
