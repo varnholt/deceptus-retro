@@ -10,6 +10,7 @@
 #define REG_DMA_SOURCE REG32(0x040000d4)
 #define REG_DMA_DESTINATION REG32(0x040000d8)
 #define REG_DMA_CONTROL REG32(0x040000dc)
+#define GBA_OBJECT_PRIORITY (GBA_LAYERED_BACKGROUND ? 2 : (GBA_CAMPAIGN ? 1 : 0))
 
 extern const retro_room deceptus_room;
 
@@ -21,11 +22,20 @@ typedef struct gba_object {
 } gba_object;
 
 #if GBA_CAMPAIGN
+#if GBA_TUTORIAL
+static retro_adventure adventure;
+#define campaign adventure.campaign
+#define GBA_SCENERY_FLAGS adventure.flags
+#else
 static retro_campaign campaign;
+#endif
 #define engine campaign.engine
 static const gba_stage *active_stage;
 #else
 static retro_engine engine;
+#endif
+#ifndef GBA_SCENERY_FLAGS
+#define GBA_SCENERY_FLAGS 0
 #endif
 static retro_frame frame;
 static retro_video_caps video = {240, 160, RETRO_DRAW_CAPACITY};
@@ -39,7 +49,7 @@ typedef struct gba_upload {
 } gba_upload;
 static gba_upload uploads[32];
 static retro_u16 upload_count, upload_bytes;
-volatile retro_u16 retro_debug[36];
+volatile retro_u16 retro_debug[44];
 #if !GBA_STREAMED_BACKGROUND
 static retro_u16 map_chunk = 65535;
 #endif
@@ -76,6 +86,15 @@ static retro_u16 input_read(void)
     if (keys & 3) {
         buttons |= RETRO_JUMP;
     }
+    if (keys & 1) {
+        buttons |= RETRO_ACCEPT;
+    }
+    if (keys & 2) {
+        buttons |= RETRO_BACK;
+    }
+    if (keys & (1 << 7)) {
+        buttons |= RETRO_DOWN;
+    }
     if (keys & (1 << 6)) {
         buttons |= RETRO_UP;
     }
@@ -91,7 +110,7 @@ static retro_u16 input_read(void)
 static void video_init(void)
 {
     retro_u16 index;
-    REG_DISPLAY = 1 << 7;
+    REG_DISPLAY = 1 << 6;
     dma_copy(gba_background0, (void *)0x06000000, GBA_BACKGROUND0_BYTES);
     dma_copy(gba_background1, (void *)0x06008000, GBA_BACKGROUND1_BYTES);
 
@@ -106,8 +125,8 @@ static void video_init(void)
 #endif
     dma_copy(gba_actor_palette, (void *)0x05000200, GBA_ACTOR_PALETTE_BYTES);
     /* two 512x256 4bpp planes, with independent character blocks. */
-    REG16(0x04000008) = 1 | (28 << 8) | (1 << 14);
-    REG16(0x0400000a) = 2 | (2 << 2) | (30 << 8) | (1 << 14);
+    REG16(0x04000008) = (GBA_LAYERED_BACKGROUND ? 3 : 1) | (28 << 8) | (1 << 14);
+    REG16(0x0400000a) = (GBA_LAYERED_BACKGROUND ? 1 : 2) | (2 << 2) | (30 << 8) | (1 << 14);
     for (index = 0; index < 128; ++index) {
         objects[index].attribute0 = 1 << 9;
         objects[index].attribute1 = 0;
@@ -126,6 +145,7 @@ static void video_init(void)
 
 #include "background.h"
 #include "hud.h"
+#include "menu.h"
 
 static retro_u16 mechanism_resource(retro_u16 resource)
 {
@@ -184,7 +204,7 @@ static void mechanism_objects(retro_u16 *count)
         }
         segments = 1;
         if (definition->kind == RETRO_MECH_LEVER) {
-            resource = GBA_LEVER_FIRST + ((definition->flags & RETRO_MECH_MISSING_HANDLE) ? 32 : state->frame);
+            resource = GBA_LEVER_FIRST + (!state->handle_available ? 32 : state->frame);
         } else if (definition->kind == RETRO_MECH_BLOCK && engine.mechanisms.timings &&
                    (engine.mechanisms.timings[index].flags & RETRO_TIMED_ANIMATION)) {
             resource = GBA_BLOCK_FIRST + state->frame;
@@ -237,7 +257,7 @@ static void mechanism_objects(retro_u16 *count)
                 object = &objects[(*count)++];
                 object->attribute0 = ((retro_u16)y & 255) | (1 << 13);
                 object->attribute1 = ((retro_u16)x & 511) | (1 << 14);
-                object->attribute2 = tile + piece * 8 + (GBA_CAMPAIGN ? 1 << 10 : 0);
+                object->attribute2 = tile + piece * 8 + (GBA_OBJECT_PRIORITY << 10);
             }
         }
     }
@@ -281,7 +301,7 @@ static void enemy_objects(retro_u16 *count, const retro_draw *draw)
             object = &objects[(*count)++];
             object->attribute0 = ((retro_u16)y & 255) | (1 << 13);
             object->attribute1 = ((retro_u16)x & 511) | (1 << 14);
-            object->attribute2 = tile + piece * 8 + (GBA_CAMPAIGN ? 1 << 10 : 0);
+            object->attribute2 = tile + piece * 8 + (GBA_OBJECT_PRIORITY << 10);
         }
     }
 }
@@ -300,7 +320,13 @@ static void video_prepare(void)
     upload_bytes = 3 * GBA_ACTOR_FRAME_BYTES;
     actor_count = 0;
 #if GBA_CAMPAIGN
-    if (campaign.mode != RETRO_CAMPAIGN_PLAYING) {
+#if GBA_TUTORIAL
+    if (menu_active) {
+        return;
+    }
+#endif
+    if (campaign.mode == RETRO_CAMPAIGN_TITLE || campaign.mode == RETRO_CAMPAIGN_FINISHED ||
+        campaign.mode == RETRO_CAMPAIGN_READY) {
         return;
     }
 #endif
@@ -328,7 +354,7 @@ static void video_prepare(void)
             object = &objects[count++];
             object->attribute0 = ((retro_u16)y & 255) | (1 << 13);
             object->attribute1 = ((retro_u16)x & 511) | (1 << 14) | (draw->flip_x ? 1 << 12 : 0);
-            object->attribute2 = actor_count * 48 + piece * 8 + (GBA_CAMPAIGN ? 1 << 10 : 0);
+            object->attribute2 = actor_count * 48 + piece * 8 + (GBA_OBJECT_PRIORITY << 10);
         }
         ++actor_count;
     }
@@ -400,11 +426,26 @@ static void video_commit(void)
     REG16(0x04000054) = engine.paused ? 8 : 0;
 #endif
     REG_DISPLAY = (1 << 6) | (1 << 8) | (1 << 9) | (1 << 12) | (GBA_CAMPAIGN ? 1 << 10 : 0);
+#if GBA_TUTORIAL
+    if (menu_active) {
+        menu_commit();
+    }
+#endif
 }
 
 static void debug_write(void)
 {
-#if GBA_BACKGROUND_ANIMATION_COUNT
+#if GBA_TUTORIAL
+    retro_debug[36] = adventure.flags;
+    retro_debug[37] = adventure.inventory.counts[1];
+    retro_debug[38] = adventure.inventory.counts[2];
+    retro_debug[39] = adventure.page;
+    retro_debug[40] = hud_ui_selected;
+    retro_debug[41] = stream_jobs;
+    retro_debug[42] = engine.room->player_gravity;
+    retro_debug[43] = engine.room->player_speed;
+#endif
+#if GBA_BACKGROUND_ANIMATION_CAPACITY
     retro_debug[34] = background_clocks[0].frame;
     retro_debug[35] = background_clocks[0].elapsed;
 #endif
@@ -471,25 +512,46 @@ static void debug_write(void)
 int __attribute__((section(".iwram"))) main(void)
 {
 #if GBA_CAMPAIGN
+#if GBA_TUTORIAL
+    retro_adventure_init(&adventure, &gba_tutorial_definition, &video);
+#else
     retro_campaign_init(&campaign, &gba_campaign_definition, &video);
+#endif
     active_stage = &gba_stages[0];
 #else
     retro_init(&engine, &deceptus_room, &video);
 #endif
     video_init();
+#if GBA_TUTORIAL
+    hud_reset();
+#endif
     background_reset();
     while (1) {
 #if GBA_CAMPAIGN
+#if GBA_TUTORIAL
+        if (retro_adventure_tick(&adventure, input_read())) {
+#else
         if (retro_campaign_tick(&campaign, input_read())) {
+#endif
             active_stage = &gba_stages[campaign.room_index];
             video_init();
+#if GBA_TUTORIAL
+            hud_reset();
+#endif
             background_reset();
         }
 #else
         retro_tick(&engine, input_read());
 #endif
         retro_render(&engine, &frame);
+#if GBA_TUTORIAL
+        menu_prepare();
+        if (!menu_active) {
+            background_prepare();
+        }
+#else
         background_prepare();
+#endif
         video_prepare();
         hud_prepare();
 

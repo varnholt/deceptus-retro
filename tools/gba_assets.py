@@ -8,7 +8,7 @@ import struct
 import numpy as np
 from PIL import Image
 
-from assets import ROOT, SOURCE, import_deceptus
+from assets import ROOT, SOURCE, import_deceptus, ACTOR_FRAME_COUNT
 from palettes import banked_background, palette_rgb555
 from world_export import export_world
 
@@ -64,19 +64,38 @@ def compile_background(image, output):
     return len(patterns), metrics
 
 
-def compile_streamed_background(image, output, animations=()):
+def compile_streamed_background(image, output, animations=(), foreground=None):
     if image.width % 8 or image.height % 8 or image.width > 2040 or image.height > 2040:
         raise ValueError('streamed room dimensions must be multiples of 8 below 2048px')
-    atlas = Image.new('RGB', (image.width, image.height + sum(clip['bounds'][3] * clip['frame_count'] for clip in animations)))
+    atlas = Image.new('RGB', (image.width, image.height * (2 if foreground is not None else 1) + sum(clip['bounds'][3] * clip['frame_count'] for clip in animations)))
     atlas.paste(image, (0, 0))
     cursor = image.height
+    foreground_top = cursor
+    if foreground is not None:
+        atlas.paste(foreground.convert('RGB'), (0,cursor))
+        cursor += image.height
     for clip in animations:
         clip['atlas_y'] = cursor
         for frame in clip['frames']:
             atlas.paste(frame, (0, cursor))
             cursor += frame.height
     converted, banks, metrics = banked_background(atlas, bank_count=15)
-    converted.crop((0, 0, image.width, image.height)).save(output / 'room-preview.png')
+    preview = converted.crop((0, 0, image.width, image.height))
+    preview.save(output / 'base-background-preview.png')
+    if foreground is not None:
+        pixels = np.asarray(converted).copy()
+        mask = np.asarray(foreground.convert('RGBA'))[:,:,3] >= 128
+        pixels[foreground_top:foreground_top+image.height][~mask] = 0
+        updated = Image.fromarray(pixels, mode='P')
+        updated.putpalette(converted.getpalette())
+        converted = updated
+        front = converted.crop((0,foreground_top,image.width,foreground_top+image.height))
+        front.save(output / 'foreground-preview.png')
+        composite = np.asarray(preview).copy()
+        composite[mask] = np.asarray(front)[mask]
+        preview = Image.fromarray(composite, mode='P')
+        preview.putpalette(converted.getpalette())
+    preview.save(output / 'room-preview.png')
     for index, clip in enumerate(animations):
         folder = output / f'animation{index}'
         folder.mkdir(exist_ok=True)
@@ -85,10 +104,16 @@ def compile_streamed_background(image, output, animations=()):
             converted.crop((0, y, clip['bounds'][2], y + clip['bounds'][3])).save(folder / f'converted-{frame_index}.png')
     patterns, lookup, cells = [bytes(32)], {bytes(32): 0}, []
     animation_cells = []
+    foreground_cells = []
     regions = [(0, image.width, image.height, cells, None)]
     for clip in animations:
         regions.append((clip['atlas_y'], clip['bounds'][2], clip['bounds'][3] * clip['frame_count'], animation_cells, clip))
+    if foreground is not None:
+        regions.append((foreground_top,image.width,image.height,foreground_cells,None))
     for region_top, region_width, region_height, destination, clip in regions:
+        if destination is foreground_cells:
+            # each plane has its own character block and residency pool.
+            lookup = {bytes(32):0}
         if clip is not None:
             clip['cell_offset'] = len(animation_cells) * 2
         for top in range(region_top, region_top + region_height, 8):
@@ -110,6 +135,12 @@ def compile_streamed_background(image, output, animations=()):
     (output / 'stream-patterns.bin').write_bytes(b''.join(patterns))
     (output / 'stream-cells.bin').write_bytes(struct.pack(f'<{len(cells)}H', *cells))
     (output / 'animation-cells.bin').write_bytes(struct.pack(f'<{len(animation_cells)}H', *animation_cells) or bytes(4))
+    (output / 'foreground-cells.bin').write_bytes(struct.pack(f'<{len(foreground_cells)}H', *foreground_cells) or bytes(4))
+    durations = []
+    for clip in animations:
+        clip['duration_offset'] = len(durations) * 2
+        durations += clip.get('frame_durations', [])
+    (output/'animation-durations.bin').write_bytes(struct.pack(f'<{len(durations)}H',*durations) or bytes(4))
     (output / 'background.pal').write_bytes(palette_rgb555(converted, 16))
     # legacy resources stay valid for the common backend declarations.
     for filename, size in [('background0.bin', 32), ('background1.bin', 32), ('map0.bin', 4096), ('map1.bin', 4096)]:
@@ -134,7 +165,7 @@ def compile_actors(image, output):
     (output / 'actors.pal').write_bytes(struct.pack('<256H', *palette))
     frames = bytearray()
     for _variant in range(2):
-        for frame in range(19):
+        for frame in range(ACTOR_FRAME_COUNT):
             frame_left, frame_top = (frame % 4) * 32, (frame // 4) * 48
             frames.extend(pack_objects(indices[frame_top:frame_top + 48, frame_left:frame_left + 32]))
     (output / 'actors.bin').write_bytes(frames)
@@ -241,9 +272,15 @@ def compile_assets(data, scene="lever", recipe_path=None):
         if not streamed:
             raise ValueError('baked water requires a streamed room')
         animations = bake_room(data, recipe, room)
-        if len(animations) > 4:
-            raise ValueError('room exceeds four background animation clips')
-    patterns, metrics = compile_streamed_background(room, OUTPUT, animations) if streamed else compile_background(room, OUTPUT)
+    if recipe.get('scenery_variants'):
+        from scenery import variants
+        if not streamed:
+            raise ValueError('conditional scenery requires a streamed room')
+        animations += variants(data, recipe, room)
+    if len(animations) > 4:
+        raise ValueError('room exceeds four background animation clips')
+    foreground = Image.open(source/'foreground.png').convert('RGBA') if recipe.get('foreground_layers') else None
+    patterns, metrics = compile_streamed_background(room, OUTPUT, animations, foreground) if streamed else compile_background(room, OUTPUT)
     for index, clip in enumerate(animations):
         folder = OUTPUT / f'animation{index}'
         folder.mkdir(exist_ok=True)
@@ -260,7 +297,8 @@ def compile_assets(data, scene="lever", recipe_path=None):
             for clip in animations:
                 x, y, width, height = clip['bounds']
                 handle.write('    {' + ','.join(map(str, [x//8, y//8, width//8, height//8, clip['frame_count'], clip['frame_ticks']])) +
-                             f', gba_animation_cells + {clip["cell_offset"]}' + '},\n')
+                             f', gba_animation_cells + {clip["cell_offset"]}, {clip.get("required_flags",0)}, {clip.get("forbidden_flags",0)}, ' +
+                             (f'(const retro_u16 *)(gba_animation_durations + {clip["duration_offset"]})' if clip.get('frame_durations') else '0') + '},\n')
             handle.write('};\n')
     resources = [('gba_background0', 'background0.bin'), ('gba_background1', 'background1.bin'),
                  ('gba_map0', 'map0.bin'), ('gba_map1', 'map1.bin'),
@@ -269,24 +307,25 @@ def compile_assets(data, scene="lever", recipe_path=None):
                  ('gba_mechanism_palettes', 'mechanisms.pal'), ('gba_mechanism_table', 'mechanisms.tbl')]
     if streamed:
         resources += [('gba_stream_patterns', 'stream-patterns.bin'), ('gba_stream_cells', 'stream-cells.bin'),
-                      ('gba_animation_cells', 'animation-cells.bin')]
+                      ('gba_animation_cells', 'animation-cells.bin'), ('gba_foreground_cells','foreground-cells.bin'), ('gba_animation_durations','animation-durations.bin')]
     assembly = ['.section .rodata.gba_assets,"a",%progbits']
     header = ['#ifndef GBA_ASSETS_H', '#define GBA_ASSETS_H', '#include "retro/types.h"']
     for label, filename in resources:
         assembly += ['.balign 4', f'.global {label}', f'{label}:', f'.incbin "{(OUTPUT / filename).as_posix()}"']
         header += [f'extern const retro_u8 {label}[];', f'#define {label.upper()}_BYTES {(OUTPUT / filename).stat().st_size}']
-    header += ['#define GBA_CAMPAIGN 0', f'#define GBA_STREAMED_BACKGROUND {int(streamed)}', f'#define GBA_ROOM_COLUMNS {room.width // 8}', f'#define GBA_ROOM_ROWS {room.height // 8}', f'#define GBA_PATTERN_COUNT {patterns}',
-               f'#define GBA_BACKGROUND_ANIMATION_COUNT {len(animations)}',
-               'typedef struct gba_background_animation { retro_u16 left, top, columns, rows, frames, frame_ticks; const retro_u8 *cells; } gba_background_animation;',
+    header += ['#define GBA_CAMPAIGN 0', f'#define GBA_LAYERED_BACKGROUND {int(foreground is not None)}', f'#define GBA_STREAMED_BACKGROUND {int(streamed)}', f'#define GBA_ROOM_COLUMNS {room.width // 8}', f'#define GBA_ROOM_ROWS {room.height // 8}', f'#define GBA_PATTERN_COUNT {patterns}',
+               f'#define GBA_BACKGROUND_ANIMATION_COUNT {len(animations)}', f'#define GBA_BACKGROUND_ANIMATION_CAPACITY {len(animations)}', '#define GBA_TUTORIAL 0',
+               'typedef struct gba_background_animation { retro_u16 left, top, columns, rows, frames, frame_ticks; const retro_u8 *cells; retro_u16 required_flags, forbidden_flags; const retro_u16 *durations; } gba_background_animation;',
                'extern const gba_background_animation gba_background_animations[];']
     header += ['typedef struct gba_mechanism_resource { retro_u32 offset; retro_u32 palette_offset; retro_u16 bytes; retro_u8 columns, rows, palette_first, palette_count; retro_u16 reserved; } gba_mechanism_resource;',
                '#define GBA_LEVER_FIRST 0', '#define GBA_SPIKES_FIRST 33', '#define GBA_BLOCK_FIRST 73', '#define GBA_COLLAPSE_FIRST 105', '#define GBA_RAT_FIRST 257', '#define GBA_TRAP_FIRST 327', '#define GBA_MUZZLE_FIRST 331', '#define GBA_ARROW_FIRST 371',
                f'#define GBA_MECHANISM_FRAME_COUNT {mechanism_frames}',
-               '#define GBA_ACTOR_FRAME_BYTES 1536', '#define GBA_ACTOR_FRAME_COUNT 19', '#endif', '']
+               '#define GBA_ACTOR_FRAME_BYTES 1536', f'#define GBA_ACTOR_FRAME_COUNT {ACTOR_FRAME_COUNT}', '#endif', '']
     (OUTPUT / 'data.s').write_text('\n'.join(assembly) + '\n')
     (OUTPUT / 'gba_assets.h').write_text('\n'.join(header))
     report = {'source': 'lossless original-engine import', 'scene': scene, 'scale': '1:1', 'dithering': False,
               'background_patterns': patterns, 'background_streamed': streamed, 'background_palette_banks': 15 if streamed else 16, 'background_fidelity': metrics,
+              'foreground_layered': foreground is not None,
               'baked_background_animations': animations,
               'actor_opaque_rgb555_colours': actor_colours, 'actor_palette_reduction': False,
               'mechanism_frame_rom_bytes': (OUTPUT / 'mechanisms.bin').stat().st_size,

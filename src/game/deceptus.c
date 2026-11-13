@@ -12,7 +12,7 @@
 #define ACCELERATION 4
 #define FRICTION 6
 
-static void event_push(retro_engine *engine, retro_u8 kind)
+void retro_event_push(retro_engine *engine, retro_u8 kind)
 {
     if (engine->event_count == RETRO_EVENT_CAPACITY) {
         engine->event_overflow = 1;
@@ -34,6 +34,9 @@ static void respawn(retro_engine *engine)
     player->grounded = 0;
     player->coyote_ticks = 0;
     player->jump_buffer_ticks = 0;
+    player->crouched = 0;
+    player->bend_ticks = 0;
+    player->drop_ticks = 0;
 }
 
 static void update_camera(retro_engine *engine)
@@ -106,10 +109,27 @@ static retro_fixed approach(retro_fixed value, retro_fixed target, retro_i16 amo
 
 static void update_player(retro_engine *engine, const retro_input *input)
 {
+    static const retro_u8 bend_frames[18] = {0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 5, 6, 6, 6};
     retro_entity *player;
-    retro_fixed target;
+    retro_fixed target, speed;
     retro_i16 direction, wall;
+    retro_u16 gravity;
+    retro_u8 height, was_grounded;
     player = &engine->entities[0];
+    was_grounded = player->grounded;
+    if ((input->held & RETRO_DOWN) && player->grounded) {
+        player->crouched = 1;
+    } else if (player->crouched && retro_body_clear(engine->room, &engine->mechanisms, player->x, player->y,
+                                                    PLAYER_HALF_WIDTH, PLAYER_HEIGHT)) {
+        player->crouched = 0;
+    }
+    if (player->crouched) {
+        if (player->bend_ticks < 17) {
+            ++player->bend_ticks;
+        }
+    } else if (player->bend_ticks) {
+        --player->bend_ticks;
+    }
     wall = 0;
     if (engine->room->skills & RETRO_SKILL_WALL_JUMP) {
         wall = retro_wall_side(engine->room, player, &engine->mechanisms);
@@ -121,7 +141,12 @@ static void update_player(retro_engine *engine, const retro_input *input)
     if (input->held & RETRO_RIGHT) {
         ++direction;
     }
-    target = direction * (retro_fixed)MAX_SPEED;
+    if (player->crouched && !(engine->room->skills & RETRO_SKILL_CRAWL) && !(input->pressed & RETRO_JUMP)) {
+        direction = 0;
+        player->velocity_x = 0;
+    }
+    speed = engine->room->player_speed ? engine->room->player_speed : MAX_SPEED;
+    target = direction * speed;
     player->velocity_x = approach(player->velocity_x, target, direction ? ACCELERATION : FRICTION);
     if (direction) {
         player->facing_left = direction < 0;
@@ -134,7 +159,19 @@ static void update_player(retro_engine *engine, const retro_input *input)
     if (player->jump_buffer_ticks) {
         --player->jump_buffer_ticks;
     }
-    if (input->pressed & RETRO_JUMP) {
+    if (player->drop_ticks) {
+        --player->drop_ticks;
+    }
+    if ((input->pressed & RETRO_JUMP) && (input->held & RETRO_DOWN) && player->grounded &&
+        (retro_cell(engine->room, retro_position_cell(player->x), retro_position_cell(player->y)) & RETRO_ONE_WAY)) {
+        player->drop_ticks = 20;
+        player->grounded = 0;
+        player->coyote_ticks = 0;
+        player->jump_buffer_ticks = 0;
+        player->velocity_y = RETRO_ONE;
+        player->crouched = 0;
+        player->bend_ticks = 0;
+    } else if ((input->pressed & RETRO_JUMP) && !player->crouched) {
         player->jump_buffer_ticks = 6;
     }
     if (player->jump_buffer_ticks && player->coyote_ticks) {
@@ -142,30 +179,48 @@ static void update_player(retro_engine *engine, const retro_input *input)
         player->jump_buffer_ticks = 0;
         player->coyote_ticks = 0;
         player->grounded = 0;
-        event_push(engine, RETRO_EVENT_JUMP);
+        retro_event_push(engine, RETRO_EVENT_JUMP);
     }
     if (player->jump_buffer_ticks && !player->grounded && !player->coyote_ticks && wall) {
         player->velocity_y = -JUMP_SPEED;
-        player->velocity_x = -wall * MAX_SPEED;
+        player->velocity_x = -wall * speed;
         player->jump_buffer_ticks = 0;
-        event_push(engine, RETRO_EVENT_JUMP);
+        retro_event_push(engine, RETRO_EVENT_JUMP);
     }
     /* a released jump cuts ascent; buffered landings still get an initial jump. */
     if ((input->released & RETRO_JUMP) && player->velocity_y < -28) {
         player->velocity_y = -28;
     }
-    player->velocity_y += GRAVITY;
+    if (engine->room->player_gravity) {
+        gravity = player->gravity_fraction + (retro_u16)engine->room->player_gravity_fraction;
+        player->gravity_fraction = (retro_u8)gravity;
+        player->velocity_y +=
+            (player->velocity_y >= 0 && engine->room->player_fall_gravity ? engine->room->player_fall_gravity
+                                                                          : engine->room->player_gravity) +
+            (gravity >> 8);
+    } else {
+        player->velocity_y += GRAVITY;
+    }
     if (wall && direction == wall && !player->grounded && player->velocity_y > 32) {
         player->velocity_y = 32;
     }
     if (player->velocity_y > MAX_FALL) {
         player->velocity_y = MAX_FALL;
     }
-    retro_move_horizontal_dynamic(engine->room, player, PLAYER_HALF_WIDTH, PLAYER_HEIGHT, &engine->mechanisms);
-    retro_move_vertical_dynamic(engine->room, player, PLAYER_HALF_WIDTH, PLAYER_HEIGHT, &engine->mechanisms);
+    height = RETRO_PLAYER_HEIGHT(player);
+    retro_move_horizontal_dynamic(engine->room, player, PLAYER_HALF_WIDTH, height, &engine->mechanisms);
+    retro_move_vertical_dynamic(engine->room, player, PLAYER_HALF_WIDTH, height, &engine->mechanisms);
+    if (player->grounded && !was_grounded) {
+        retro_event_push(engine, RETRO_EVENT_LAND);
+    }
     ++player->animation_ticks;
+    if (player->grounded && player->velocity_x && !(player->animation_ticks & 15)) {
+        retro_event_push(engine, RETRO_EVENT_STEP);
+    }
     if (!player->grounded) {
         player->frame = player->velocity_y < 0 ? 16 : 17;
+    } else if (player->crouched || player->bend_ticks) {
+        player->frame = 19 + bend_frames[player->bend_ticks];
     } else if (direction) {
         player->frame = 8 + (player->animation_ticks / 4) % 8;
     } else {
@@ -187,7 +242,7 @@ static void hurt(retro_engine *engine, retro_u16 damage)
     } else if (!engine->room->max_health) {
         respawn(engine);
     }
-    event_push(engine, RETRO_EVENT_HURT);
+    retro_event_push(engine, RETRO_EVENT_HURT);
 }
 
 static void update_actors(retro_engine *engine, const retro_input *input)
@@ -227,17 +282,27 @@ static void update_actors(retro_engine *engine, const retro_input *input)
                 if (player->velocity_y > 0 && distance_y < -12) {
                     entity->active = 0;
                     player->velocity_y = -50;
-                    event_push(engine, RETRO_EVENT_JUMP);
+                    retro_event_push(engine, RETRO_EVENT_JUMP);
                 } else {
                     hurt(engine, 1);
                 }
             } else if (entity->kind == RETRO_DOOR && (input->pressed & RETRO_UP)) {
                 ++engine->door_entries;
                 respawn(engine);
-                event_push(engine, RETRO_EVENT_DOOR);
+                retro_event_push(engine, RETRO_EVENT_DOOR);
             }
         }
     }
+}
+
+void retro_place_player(retro_engine *engine, retro_i16 x, retro_i16 y)
+{
+    engine->entities[0].x = RETRO_FIXED(x);
+    engine->entities[0].y = RETRO_FIXED(y);
+    engine->entities[0].velocity_x = 0;
+    engine->entities[0].velocity_y = 0;
+    engine->entities[0].grounded = 0;
+    update_camera(engine);
 }
 
 void retro_tick(retro_engine *engine, retro_u16 buttons)
@@ -277,9 +342,9 @@ void retro_tick(retro_engine *engine, retro_u16 buttons)
     update_player(engine, &input);
     player = &engine->entities[0];
     player_rect.x = retro_floor(player->x) - PLAYER_HALF_WIDTH;
-    player_rect.y = retro_floor(player->y) - PLAYER_HEIGHT;
+    player_rect.y = retro_floor(player->y) - RETRO_PLAYER_HEIGHT(player);
     player_rect.width = PLAYER_HALF_WIDTH * 2;
-    player_rect.height = PLAYER_HEIGHT;
+    player_rect.height = RETRO_PLAYER_HEIGHT(player);
     retro_mechanisms_tick(&engine->mechanisms, &player_rect, (input.pressed & RETRO_UP) != 0);
     for (mechanism_index = 0; mechanism_index < engine->mechanisms.event_count; ++mechanism_index) {
         mechanism_event = &engine->mechanisms.events[mechanism_index];
@@ -289,7 +354,7 @@ void retro_tick(retro_engine *engine, retro_u16 buttons)
             engine->checkpoint_x = mechanism->bounds.x + mechanism->bounds.width / 2;
             engine->checkpoint_y = mechanism->bounds.y + mechanism->bounds.height;
             engine->checkpoint_id = mechanism->source_id;
-            event_push(engine, RETRO_EVENT_CHECKPOINT);
+            retro_event_push(engine, RETRO_EVENT_CHECKPOINT);
         } else if (mechanism_event->kind == RETRO_MECH_HIT) {
             hurt(engine, mechanism_event->value);
         }

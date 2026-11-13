@@ -18,6 +18,7 @@ from world_export import export_world
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "assets" / "source"
 GENERATED = ROOT / "assets" / "generated"
+ACTOR_FRAME_COUNT = 26
 
 
 def import_deceptus(data, recipe_path=None, source=SOURCE):
@@ -28,7 +29,10 @@ def import_deceptus(data, recipe_path=None, source=SOURCE):
     crop = recipe["crop_pixels"]
     names = recipe["visual_layers"]
     room = Image.new("RGBA", crop[2:], (10, 10, 20, 255))
-    room.alpha_composite(tiled.render(crop, names))
+    foreground_names = recipe.get('foreground_layers', [])
+    room.alpha_composite(tiled.render(crop, [name for name in names if name not in foreground_names]))
+    if foreground_names:
+        tiled.render(crop, foreground_names).save(source / 'foreground.png')
     room.convert("RGB").save(source / "catacombs.png")
     # tile collision vectors, not artwork alpha; dynamic blockers stay dynamic.
     collision = tiled.render(crop, recipe["collision_layers"], collision=True)
@@ -37,11 +41,13 @@ def import_deceptus(data, recipe_path=None, source=SOURCE):
     one_way.save(source / "one_way.png")
     animations = json.loads((data / "sprites" / "animations.json").read_text())
     original = Image.open(data / "sprites" / "player.png").convert("RGBA")
-    sheet = Image.new("RGBA", (128, 240))
+    sheet = Image.new("RGBA", (128, 336))
     selections = [("player_idle_r", index) for index in range(8)]
     selections += [("player_run_r", index) for index in range(8)]
     selections += [("player_jump_up_r", 0), ("player_jump_down_r", 0)]
+    selections += [('prototype_portal',0)] + [('player_bend_down_r',index) for index in range(7)]
     for frame, (name, index) in enumerate(selections):
+        if name == 'prototype_portal': continue
         animation = animations[name]
         offset_x, offset_y = animation["frame_offset"]
         width, height = animation["frame_size"]
@@ -91,6 +97,7 @@ def indexed(image, transparent=False):
         sample.putdata(opaque)
     quantized = sample.quantize(colors=15, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     palette = (quantized.getpalette() or [0] * 45)[:45]
+    palette += [0] * (45-len(palette))
     colours = [tuple(palette[index:index + 3]) for index in range(0, 45, 3)]
     lookup = {}
     pixels = []
@@ -181,7 +188,7 @@ def compile_assets():
                 overflow_map[address] = attributes | (pattern - 1023)
     (GENERATED / "room.map").write_bytes(struct.pack("<2048H", *hardware_map))
     (GENERATED / "overflow.map").write_bytes(struct.pack("<2048H", *overflow_map))
-    actors = indexed(Image.open(SOURCE / "actors.png"), transparent=True)
+    actors = indexed(Image.open(SOURCE / "actors.png").crop((0,0,128,240)), transparent=True)
     actors.save(GENERATED / "actors-preview.png")
     # object tile rows must have exactly 16 tiles; frames use 2x3 16px objects.
     actor_tiles = [planar4(actors.crop((left, top, left + 8, top + 8)))

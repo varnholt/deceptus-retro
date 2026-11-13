@@ -55,7 +55,9 @@ def build(data, clang='clang', linker='ld.lld', objcopy='llvm-objcopy', full_gam
             raise SystemExit('Full-game content support is incomplete; see build/content/summary.json')
     folder = ROOT / 'build/gba'
     folder.mkdir(parents=True, exist_ok=True)
-    if scene == 'tonight':
+    if scene == 'tutorial':
+        run([sys.executable, ROOT / 'tools/tutorial_assets.py', '--data', data], ROOT)
+    elif scene == 'tonight':
         run([sys.executable, ROOT / 'tools/campaign_assets.py', '--data', data], ROOT)
     else:
         run([sys.executable, ROOT / 'tools/gba_assets.py', '--data', data, '--scene', scene], ROOT)
@@ -64,7 +66,7 @@ def build(data, clang='clang', linker='ld.lld', objcopy='llvm-objcopy', full_gam
              '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-ffunction-sections', '-fdata-sections',
              '-std=c90', '-Wall', '-Wextra', '-Werror', '-I' + str(ROOT / 'include'),
              '-I' + str(ROOT / 'assets/generated/gba'), '-I' + str(platform / 'freestanding')]
-    sources = [ROOT / 'src/engine/animation.c', ROOT / 'src/engine/world.c', ROOT / 'src/engine/entities.c', ROOT / 'src/engine/mechanisms.c',
+    sources = [ROOT / 'src/engine/adventure.c', ROOT / 'src/engine/animation.c', ROOT / 'src/engine/world.c', ROOT / 'src/engine/entities.c', ROOT / 'src/engine/mechanisms.c',
                ROOT / 'src/engine/logic.c', ROOT / 'src/engine/enemies.c', ROOT / 'src/game/deceptus.c', ROOT / 'src/game/campaign.c', platform / 'main.c',
                platform / 'runtime.c', ROOT / 'assets/generated/gba/room.c']
     objects = []
@@ -98,6 +100,6 @@ if __name__ == '__main__':
     parser.add_argument('--linker', default='ld.lld')
     parser.add_argument('--objcopy', default='llvm-objcopy')
     parser.add_argument('--full-game', action='store_true')
-    parser.add_argument("--scene", choices=["lever", "platforms", "preview", "cell", "tonight", "water"], default="tonight")
+    parser.add_argument("--scene", choices=["lever", "platforms", "preview", "cell", "tonight", "water", "tutorial"], default="tonight")
     args = parser.parse_args()
     build(args.data.resolve(), args.clang, args.linker, args.objcopy, args.full_game, args.scene)

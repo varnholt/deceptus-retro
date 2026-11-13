@@ -2,6 +2,7 @@
 
 import argparse
 import ctypes as C
+import os
 from pathlib import Path
 import time
 import tkinter as tk
@@ -48,8 +49,13 @@ class Host:
 
 
 def play(backend, core, library, rom=None):
+    timer_api = C.WinDLL('winmm') if os.name == 'nt' else None
+    if timer_api:
+        timer_api.timeBeginPeriod(1)
     window = tk.Tk()
-    window.title(f"Deceptus — {backend} | arrows move / Z jump / Up interact / Enter pause / R restart")
+    window.title(f"Deceptus — {rom.stem if rom else backend} | " +
+                 ("arrows move / Z or X jump / Up interact / Enter menu / Tab inventory" if backend == 'gba'
+                  else "arrows move / Z jump / Up interact / Enter pause / R restart"))
     canvas = tk.Label(window, borderwidth=0)
     canvas.pack()
     if backend == 'gba':
@@ -70,6 +76,8 @@ def play(backend, core, library, rom=None):
         nonlocal deadline, timer
         if emulator:
             mapping = {"left": 6, "right": 7, "z": 0, "space": 0, "up": 4, "return": 3, "r": 2}
+            if backend == 'gba':
+                mapping.update(z=8, space=8, x=0, down=5, tab=2)
             emulator.run(1, [value for key, value in mapping.items() if key in keys])
             image = emulator.last_image
         else:
@@ -95,6 +103,8 @@ def play(backend, core, library, rom=None):
             timer = None
         if emulator:
             emulator.close()
+        if timer_api:
+            timer_api.timeEndPeriod(1)
         window.destroy()
 
     window.protocol("WM_DELETE_WINDOW", close)

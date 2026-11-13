@@ -48,6 +48,24 @@ static retro_u8 collision_cell(const retro_room *room, const retro_mechanism_set
     return value;
 }
 
+retro_u8 retro_body_clear(const retro_room *room, const retro_mechanism_set *mechanisms, retro_fixed x, retro_fixed y,
+                          retro_u8 half_width, retro_u8 height)
+{
+    retro_i16 column, row, left, right, top, bottom;
+    left = retro_position_cell(x - RETRO_FIXED(half_width));
+    right = retro_position_cell(x + RETRO_FIXED(half_width - 1));
+    top = retro_position_cell(y - RETRO_FIXED(height));
+    bottom = retro_position_cell(y - 1);
+    for (row = top; row <= bottom; ++row) {
+        for (column = left; column <= right; ++column) {
+            if (collision_cell(room, mechanisms, column, row) & RETRO_SOLID) {
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
 void retro_move_horizontal_dynamic(const retro_room *room, retro_entity *entity, retro_u8 half_width, retro_u8 height,
                                    const retro_mechanism_set *mechanisms)
 {
@@ -89,7 +107,8 @@ void retro_move_vertical_dynamic(const retro_room *room, retro_entity *entity, r
     for (column = left; column <= right; ++column) {
         cell = collision_cell(room, mechanisms, column, row);
         blocked = (cell & RETRO_SOLID) != 0;
-        if ((cell & RETRO_ONE_WAY) && entity->velocity_y >= 0 && old_bottom <= row * RETRO_CELL_SIZE) {
+        if ((cell & RETRO_ONE_WAY) && !entity->drop_ticks && entity->velocity_y >= 0 &&
+            old_bottom <= row * RETRO_CELL_SIZE) {
             blocked = 1;
         }
         if (blocked) {

@@ -55,6 +55,7 @@ retro_u8 retro_mechanisms_init(retro_mechanism_set *set, const retro_mechanism_d
         set->states[index].enabled = definitions[index].enabled != 0;
         set->states[index].visible = 1;
         set->states[index].active = set->states[index].enabled;
+        set->states[index].handle_available = !(definitions[index].flags & RETRO_MECH_MISSING_HANDLE);
     }
     return 1;
 }
@@ -244,7 +245,7 @@ void retro_mechanisms_tick(retro_mechanism_set *set, const retro_rect *player, r
             }
         }
         if (definition->kind == RETRO_MECH_LEVER) {
-            if (inside && interact_pressed && !state->cooldown && !(definition->flags & RETRO_MECH_MISSING_HANDLE)) {
+            if (inside && interact_pressed && !state->cooldown && state->handle_available) {
                 for (target = 0; target < definition->target_count; ++target) {
                     retro_i16 slot;
                     slot = retro_mechanism_find(set, set->targets[definition->target_first + target]);

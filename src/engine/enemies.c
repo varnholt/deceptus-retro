@@ -187,7 +187,8 @@ retro_u16 retro_enemies_tick(retro_engine *engine)
             rat_tick(engine, enemy, definition);
             dx = retro_floor(enemy->x) - retro_floor(engine->entities[0].x);
             dy = retro_floor(enemy->y) - retro_floor(engine->entities[0].y);
-            if (dx > -15 && dx < 15 && dy > -30 && dy < 14 && definition->damage > damage) {
+            if (dx > -15 && dx < 15 && dy > -RETRO_PLAYER_HEIGHT(&engine->entities[0]) && dy < 14 &&
+                definition->damage > damage) {
                 damage = definition->damage;
             }
         } else {
@@ -233,7 +234,7 @@ retro_u16 retro_enemies_tick(retro_engine *engine)
         }
         dx = x - retro_floor(engine->entities[0].x);
         dy = y - retro_floor(engine->entities[0].y);
-        if (dx >= -9 && dx <= 9 && dy >= -30 && dy <= 0) {
+        if (dx >= -9 && dx <= 9 && dy >= -RETRO_PLAYER_HEIGHT(&engine->entities[0]) && dy <= 0) {
             if (arrow->damage > damage) {
                 damage = arrow->damage;
             }

@@ -15,7 +15,12 @@
 #define RETRO_UP 8
 #define RETRO_PAUSE 16
 #define RETRO_RESTART 32
+#define RETRO_DOWN 64
+#define RETRO_ACCEPT 128
+#define RETRO_BACK 256
 #define RETRO_SKILL_WALL_JUMP 1
+#define RETRO_SKILL_CRAWL 2
+#define RETRO_PLAYER_HEIGHT(player) ((player)->crouched ? 18 : 30)
 
 #define RETRO_EMPTY 0
 #define RETRO_SOLID 1
@@ -30,6 +35,12 @@
 #define RETRO_EVENT_HURT 2
 #define RETRO_EVENT_DOOR 3
 #define RETRO_EVENT_CHECKPOINT 4
+#define RETRO_EVENT_ITEM 5
+#define RETRO_EVENT_LEVER 6
+#define RETRO_EVENT_LEVER_INSERT 7
+#define RETRO_EVENT_DIALOGUE 8
+#define RETRO_EVENT_STEP 9
+#define RETRO_EVENT_LAND 10
 
 typedef struct retro_input {
     retro_u16 held;
@@ -62,6 +73,10 @@ typedef struct retro_room {
     retro_u16 enemy_path_count;
     retro_u8 max_health;
     retro_u8 skills;
+    retro_u8 player_gravity;
+    retro_u8 player_gravity_fraction;
+    retro_u8 player_speed;
+    retro_u8 player_fall_gravity;
 } retro_room;
 
 typedef struct retro_entity {
@@ -76,6 +91,9 @@ typedef struct retro_entity {
     retro_u8 coyote_ticks;
     retro_u8 jump_buffer_ticks;
     retro_u8 animation_ticks;
+    retro_u8 drop_ticks;
+    retro_u8 gravity_fraction;
+    retro_u8 crouched, bend_ticks;
     retro_u8 frame;
     retro_u8 definition, state, target, inverse, arrived, fired;
     retro_u16 timer, pause_ticks, random_seed;
@@ -146,6 +164,9 @@ void retro_init(retro_engine *engine, const retro_room *room, const retro_video_
 void retro_tick(retro_engine *engine, retro_u16 buttons);
 /* builds a bounded list of logical metasprites without modifying simulation. */
 void retro_render(const retro_engine *engine, retro_frame *frame);
+/* move to a room entrance and immediately reframe the camera. */
+void retro_place_player(retro_engine *engine, retro_i16 x, retro_i16 y);
+void retro_event_push(retro_engine *engine, retro_u8 kind);
 /* returns solid outside horizontal/top boundaries, empty below the room. */
 retro_u8 retro_cell(const retro_room *room, retro_i16 column, retro_i16 row);
 /* claims a zeroed entity slot; returns null when the pool is full. */

@@ -198,7 +198,7 @@ def crop_mechanisms(data, recipe):
         if not 1 <= obj["id"] <= 65535:
             raise ValueError(f'object id {obj["id"]} exceeds the supported 16-bit identity range')
         props = obj["properties"]
-        names = props.get("target_ids", props.get("target_id", ""))
+        names = recipe.get('native_links', {}).get(obj['name'], props.get("target_ids", props.get("target_id", "")))
         first = len(targets)
         for name in str(names).split(";"):
             if not name.strip():

@@ -7,7 +7,7 @@ import unittest
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from gba_assets import linear4
+from gba_assets import linear4, ACTOR_FRAME_COUNT
 from palettes import palette_rgb555
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +15,7 @@ GENERATED = ROOT / 'assets/generated/gba'
 
 def graphics_folder():
     budget = GENERATED / 'budget.json'
-    if budget.exists() and json.loads(budget.read_text()).get('scene') == 'tonight':
+    if budget.exists() and json.loads(budget.read_text()).get('stages'):
         return GENERATED / 'area0'
     return GENERATED
 
@@ -29,8 +29,8 @@ class GbaGraphicsTests(unittest.TestCase):
     def test_generated_maps_reconstruct_the_gba_image(self):
         if not (GENERATED / 'budget.json').exists():
             self.skipTest('build the GBA assets to check their hardware maps')
-        campaign = json.loads((GENERATED / 'budget.json').read_text()).get('scene') == 'tonight'
-        folders = [GENERATED / f'area{index}' for index in range(4)] if campaign else [GENERATED]
+        campaign = json.loads((GENERATED / 'budget.json').read_text()).get('stages')
+        folders = [GENERATED / f'area{index}' for index in range(len(campaign))] if campaign else [GENERATED]
         for folder in folders:
             expected = Image.open(folder / 'room-preview.png')
             budget = json.loads((folder / 'budget.json').read_text())
@@ -38,6 +38,10 @@ class GbaGraphicsTests(unittest.TestCase):
             if streamed:
                 data = (folder / 'stream-cells.bin').read_bytes()
                 cells = struct.unpack(f'<{len(data) // 2}H', data)
+                foreground_cells = None
+                if budget.get('foreground_layered'):
+                    data = (folder/'foreground-cells.bin').read_bytes()
+                    foreground_cells = struct.unpack(f'<{len(data)//2}H',data)
                 patterns = [(folder / 'stream-patterns.bin').read_bytes()]
             else:
                 maps = [struct.unpack(f'<{(folder / f"map{plane}.bin").stat().st_size // 2}H', (folder / f'map{plane}.bin').read_bytes()) for plane in range(2)]
@@ -49,6 +53,8 @@ class GbaGraphicsTests(unittest.TestCase):
                     if streamed:
                         offset = (row * (expected.width // 8) + column) * 2
                         entries = [(patterns[0], cells[offset], cells[offset + 1])]
+                        if foreground_cells:
+                            entries.append((patterns[0], foreground_cells[offset], foreground_cells[offset+1]))
                     else:
                         address = (column // 32) * 1024 + row * 32 + column % 32
                         entries = [(patterns[plane], maps[plane][address] & 1023, maps[plane][address] & 0xfc00) for plane in (1, 0)]
@@ -70,10 +76,11 @@ class GbaGraphicsTests(unittest.TestCase):
         folder = graphics_folder()
         if not (folder / 'actors.bin').exists():
             self.skipTest('build GBA assets to verify its actor frames')
-        original = Image.open(ROOT / 'assets/source/gba/actors.png').convert('RGBA')
+        source = ROOT / ('assets/source/campaign/area0/gba/actors.png' if folder != GENERATED else 'assets/source/gba/actors.png')
+        original = Image.open(source).convert('RGBA')
         frames = (folder / 'actors.bin').read_bytes()
         palette = struct.unpack('<256H', (folder / 'actors.pal').read_bytes())
-        for frame in range(19):
+        for frame in range(ACTOR_FRAME_COUNT):
             for piece in range(6):
                 for tile_y in range(2):
                     for tile_x in range(2):

@@ -11,4 +11,6 @@ void retro_animation_reset(retro_animation *animation);
 /* invalid clips stay at frame zero; returns one if the displayed frame changes. */
 retro_u8 retro_animation_advance(retro_animation *animation, retro_u16 frames, retro_u16 frame_ticks, retro_u16 ticks,
                                  retro_u8 loop);
+retro_u8 retro_animation_advance_timed(retro_animation *animation, retro_u16 frames, const retro_u16 *durations,
+                                       retro_u16 ticks, retro_u8 loop);
 #endif

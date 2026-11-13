@@ -16,7 +16,7 @@ add_custom_target(convert_assets
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     COMMENT "converting assets from the main engine checkout")
 
-add_library(retro_engine STATIC src/engine/world.c src/engine/entities.c src/engine/mechanisms.c src/engine/logic.c src/engine/enemies.c src/engine/animation.c)
+add_library(retro_engine STATIC src/engine/world.c src/engine/entities.c src/engine/mechanisms.c src/engine/logic.c src/engine/enemies.c src/engine/animation.c src/engine/adventure.c)
 target_include_directories(retro_engine PUBLIC include)
 set_target_properties(retro_engine PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(deceptus_game STATIC src/game/deceptus.c src/game/campaign.c)
@@ -36,6 +36,9 @@ add_dependencies(retro_preview convert_assets)
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(adventure_tests tests/adventure_tests.c)
+    target_link_libraries(adventure_tests PRIVATE deceptus_game)
+    add_test(NAME adventure COMMAND adventure_tests)
     add_executable(animation_tests tests/animation_tests.c)
     target_link_libraries(animation_tests PRIVATE retro_engine)
     add_test(NAME animation COMMAND animation_tests)

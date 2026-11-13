@@ -49,7 +49,7 @@ def export_world(source, output, recipe):
     coordinates = recipe["spawn"] + recipe["patrol"] + recipe["door"]
     lines += ['const retro_room deceptus_room = {', f'    room_collision, {columns}, {rows}, ' + ', '.join(map(str, coordinates)) + ',',
               f"    {'room_mechanisms' if definitions else '0'}, {len(definitions)}, {'room_targets' if targets else '0'}, {len(targets)}, {'room_timings' if definitions else '0'},",
-              f"    {'room_enemies' if enemies['definitions'] else '0'}, {len(enemies['definitions'])}, {'room_paths' if enemies['paths'] else '0'}, {len(enemies['paths'])}, {recipe.get('max_health', 0)}, {recipe.get('skills', 0)}",
+              f"    {'room_enemies' if enemies['definitions'] else '0'}, {len(enemies['definitions'])}, {'room_paths' if enemies['paths'] else '0'}, {len(enemies['paths'])}, {recipe.get('max_health', 0)}, {recipe.get('skills', 0)}, {recipe.get('player_gravity',0)}, {recipe.get('player_gravity_fraction',0)}, {recipe.get('player_speed',0)}, {recipe.get('player_fall_gravity',0)}",
               '};', '']
     (output / "room.c").write_text('\n'.join(lines))
     return len(collision)

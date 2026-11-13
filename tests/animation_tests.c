@@ -4,6 +4,7 @@
 
 int main(void)
 {
+    static const retro_u16 durations[] = {120, 2, 1};
     retro_animation animation;
     retro_u16 index;
     retro_animation_reset(&animation);
@@ -26,6 +27,13 @@ int main(void)
     assert(animation.frame == 0 && animation.elapsed == 0);
     retro_animation_advance(&animation, 65535, 65535, 65535, 1);
     assert(animation.frame == 1 && animation.elapsed == 0);
+    retro_animation_reset(&animation);
+    retro_animation_advance_timed(&animation, 3, durations, 119, 1);
+    assert(animation.frame == 0 && animation.elapsed == 119);
+    retro_animation_advance_timed(&animation, 3, durations, 1, 1);
+    assert(animation.frame == 1 && animation.elapsed == 0);
+    retro_animation_advance_timed(&animation, 3, durations, 3, 1);
+    assert(animation.frame == 0 && animation.elapsed == 0);
     puts("animation playback checks passed");
     return 0;
 }

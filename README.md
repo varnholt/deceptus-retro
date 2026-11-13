@@ -9,6 +9,26 @@ The full-game port has started; see [PORTING.md](PORTING.md) for the source
 inventory, Lua compilation strategy, verified scope and remaining work. The
 default GBA ROM is now a four-area playable preview; the whole game remains unfinished.
 
+## GBA tutorial playtest
+
+Build the current opening with `python tools/build_gba.py --scene tutorial`
+(with the LLVM executable arguments below if they are not on PATH). Open
+`build/gba/deceptus-tutorial.gba` in mGBA. Numbered copies for local testing live
+in `build/playtest/` and remain unchanged while development builds continue.
+
+This version imports twelve original rooms, including the lower Crossroads
+exit into Fool's Ledge, original dialogue, key/locker/lever-handle interactions,
+room state, foreground occlusion, crouching and a rotating title background.
+Menus use the original naming and artwork. Arrow keys move, Z confirms/jumps,
+X goes back, Up interacts, Down bends, Enter pauses and Tab opens inventory in
+`tools/play.py`. Down + Z drops through a one-way floor.
+
+Playtest 04 fixes glyph spacing, missing one-way floor artwork, room-title
+pattern collisions and opaque water covering the player. The water surface is
+baked from the original source and played as tiles. Swimming, reactive splashes,
+audio and the complete opening progression remain unfinished. Emulator scene
+checks establish rendering and selected connections, not a full-game playthrough.
+
 `deceptus_engine` remains the main repository and the source of truth for game
 content. This repository contains code and conversion recipes. Every build
 reads the original map, tilesets, collision vectors and animation definitions

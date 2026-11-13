@@ -67,6 +67,7 @@ typedef struct retro_mechanism_state {
     retro_u8 phase;
     retro_u8 pending;
     retro_u8 pending_count;
+    retro_u8 handle_available;
     retro_u16 timer;
     retro_u16 cooldown;
     retro_u16 idle_ticks;
