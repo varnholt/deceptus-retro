@@ -1,5 +1,10 @@
 # GBA backend
 
+For the current twelve-room opening, build `--scene tutorial`. See
+[building](docs/BUILDING.md), [architecture](docs/ARCHITECTURE.md) and
+[status](docs/STATUS.md). The four-area preview described below is a separate,
+retained verification route and remains the build script default.
+
 The default build is a short, four-area playable preview. It has a title,
 briefings, original rat and arrow-trap placements, checkpoints, wall jumps,
 linked spike traps, collapsing platforms, room transitions, and finish/replay.
@@ -101,11 +106,48 @@ explicitly; general palette allocation for arbitrary scenes remains unfinished.
 | `0x0600f000` | Secondary 64x32 map |
 | `0x06010000` | Actor slots followed by cached mechanism/enemy resources |
 
-The backend uses mode 0 and DMA3 during VBlank, with explicit DMA-start delay.
+The playfield uses mode 0 and DMA3 during VBlank, with explicit DMA-start delay.
 Hot renderer and simulation code is copied into IWRAM; renderer code uses ARM
 instructions and portable engine code uses Thumb. Linker limits protect ROM,
 EWRAM and the 28KiB code region below the reserved IWRAM stacks. The runtime has
 no heap, floating point, host C library, interrupts, audio or save backend.
+
+## Tutorial renderer and UI
+
+The tutorial playfield uses mode 0: BG0 behind the player (priority 3), BG1 in
+front (priority 1), OBJ at priority 2 and BG2 UI at priority 0. Source layer z
+values select occluding artwork. Water body/foam are currently baked behind
+the actor; original translucent/stencil water effects are not complete.
+
+Pattern residency has separate 1,023-slot background and 511-slot foreground
+pools. Reference counts keep still-visible tiles pinned while incoming/outgoing
+rows and columns stream at 8px boundaries. Dirty animation rectangles update
+separately. Room loads or larger camera changes rebuild the visible window.
+The working window is 32x22 cells, including scroll margins.
+
+UI resources use `0x0600c000..0x0600cfff` plus
+`0x0600d800..0x0600dfff`, skipping the UI tilemap at `0x0600d000`. Corner cue
+labels are shifted into their own scratch patterns so they stay on screen
+while the world indicator moves. Transient room names reserve separate patterns
+when a cue replaces the ordinary font resource, avoiding glyph corruption.
+
+The title changes to mode 1 with an affine BG2 starmap texture and BG0 text.
+A 4,096-entry sine table updates the matrix every rendered frame. It uses a
+native 128x128 crop from the original starmap texture, without a runtime 3D mesh.
+Returning to play restores the normal video configuration and tile cache.
+
+Tutorial dialogue/menu text comes directly from the original Deceptum bitmap
+atlas at 13px. Headings use exact integer 2x pixels. Source artwork and native
+font pixels are never horizontally fitted or smoothed to fit the display.
+Player graphics contain 26 logical frames: idle/run/airborne, the retained
+prototype portal, and seven source bend frames. Crouching is shared simulation;
+full crawl progression is not implemented by merely pressing Down.
+
+The title/controls/inventory/pause menus and original dialogue windows are baked
+offline into fixed-budget resources. No runtime font rasterizer or PSD parser
+is included in the cartridge. `tools/verify_tutorial.py` runs controlled-start
+scene checks and restores the production ROM afterward. It is separate from
+the older preview's complete curated input route.
 
 ## Verification and limits
 

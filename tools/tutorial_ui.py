@@ -3,17 +3,18 @@ import json
 import math
 import re
 import struct
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 from assets import indexed
 from gba_assets import linear4
 from palettes import palette_rgb555
 from psd_layers import layers
+from pixel_font import NativePixelFont
 
 
 class TutorialUI:
     def __init__(self, data):
         self.data=data
-        self.font=ImageFont.truetype(str(data/'fonts/deceptum.ttf'),12)
+        self.font=NativePixelFont(data/'fonts')
         self.window=layers(data/'game/messagebox.psd')
         self.title_layers=layers(data/'menus/titlescreen.psd')
         self.pause_layers=layers(data/'menus/pause.psd')
@@ -25,24 +26,27 @@ class TutorialUI:
         self.menu_ids={}
 
     @staticmethod
-    def text_width(text, font):
-        return sum(max(math.ceil(font.getlength(char)), font.getbbox(char)[2]) + 1 for char in text) - (1 if text else 0)
+    def text_width(text, font, scale=1):
+        return (sum(max(math.ceil(font.getlength(char)), font.getbbox(char)[2]) + 1 for char in text) - (1 if text else 0)) * scale
 
     @staticmethod
-    def text(image, position, text, font, fill):
-        # keep each glyph on the native pixel grid, with one clear pixel between glyphs.
-        draw = ImageDraw.Draw(image)
-        draw.fontmode = '1'
-        x, y = position
-        origin = round(x)
-        x = origin
+    def text(image, position, text, font, fill, scale=1):
+        if not isinstance(scale, int) or scale < 1:
+            raise ValueError('pixel text requires a positive integer scale')
+        x, y = map(round, position)
+        origin = x
         for char in text:
             if char == '\n':
                 x = origin
-                y += 16
+                y += 18 * scale
                 continue
-            draw.text((x, round(y)), char, font=font, fill=fill)
-            x += max(math.ceil(font.getlength(char)), font.getbbox(char)[2]) + 1
+            glyph = font.glyph(char)
+            colour = Image.new('RGBA', glyph.size, fill)
+            colour.putalpha(glyph.getchannel('A'))
+            if scale != 1:
+                colour = colour.resize((colour.width * scale, colour.height * scale), Image.Resampling.NEAREST)
+            image.alpha_composite(colour, (x - scale, y))
+            x += (max(math.ceil(font.getlength(char)), font.getbbox(char)[2]) + 1) * scale
 
     def wrap_pages(self, text):
         lines=[];line=''
@@ -109,9 +113,9 @@ class TutorialUI:
 
     def menu(self, kind, selection=0):
         image=Image.new('RGBA',(240,160));draw=ImageDraw.Draw(image)
-        title_font=ImageFont.truetype(str(self.data/'fonts/deceptum.ttf'),24)
+        title_font=self.font
         title={'main':'Deceptus','options':'Options','controls':'Controls','inventory':'Inventory','confirm':'Quit Game?','exit':'Quit','pause':''}[kind]
-        self.text(image,((240-self.text_width(title,title_font))/2,12),title,title_font,(127,171,253,255))
+        self.text(image,((240-self.text_width(title,title_font,2))/2,10),title,title_font,(127,171,253,255),2)
         labels=[]
         if kind=='main':labels=['New Game','Options','Quit']
         elif kind=='pause':

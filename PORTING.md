@@ -3,8 +3,9 @@
 The objective is the playable game described by the current `deceptus_engine`
 checkout, with its original pixel grid, upstream artwork and gameplay data.
 GBA is the first complete-game target, with SNES retained as a secondary backend.
-GBA now has a four-area curated playable preview; SNES retains its one-room
-prototype. The complete game is not ported.
+GBA now has a twelve-room opening under development and a separate four-area
+curated playable preview. SNES retains its one-room prototype. The complete
+game is not ported. See [current status](docs/STATUS.md) for verified scope.
 
 ## Source inventory
 
@@ -31,7 +32,7 @@ copies of the game. Unused script files are not mistaken for placed enemies.
 | Lua mechanism callbacks | Parse source, resolve selectors, compile bounded action programs | Two original callbacks verified; complete scripts unsupported |
 | Lua enemies | Native C state machines plus shared movement/animation/weapon services | Rat and arrow trap implemented; 14 placed script types remain to port |
 | Box2D | Fixed-point character/world collision and specific analytical mechanisms | Grid collision, dynamic rectangles and preview wall jumping; slopes/joints/water incomplete |
-| Level/cutscene logic | Persistent flags, timed actions, dialogue, inventory and event dispatch | Curated preview transitions only; original narrative/progression not implemented |
+| Level/cutscene logic | Persistent flags, dialogue, inventory, authored room arrivals and selected interactions | Opening subset implemented; full progression and cutscenes incomplete |
 | Graphics | Lossless import followed by target-specific palette/tile packing | GBA and SNES prototypes; original artwork remains 1:1 |
 | Platform services | Audio, controller mapping, save storage and ROM resource loading | GBA/SNES controls and video; host preview; audio and persistent saves incomplete |
 
@@ -65,8 +66,9 @@ collapse, falling, return and restart. Native tests cover interval/inverted
 blocks, queue saturation, deadly animation boundaries and touched-only rules.
 
 Visual differences remain: deterministic collapse shake/base destruction speeds,
-and no gradual alpha fade during return. Full level Lua dispatch and cross-room
-state persistence are separate from these reusable components.
+and no gradual alpha fade during return. Full level Lua dispatch remains
+incomplete. The tutorial adventure layer now preserves mechanism state,
+inventory and flags across its selected room graph, but not arbitrary Lua globals.
 
 ## Lua stays upstream
 
@@ -116,7 +118,7 @@ Levers, block collision changes, sensors and damage are tested in native
 fixtures. Their complete graphics, animation, inventory requirements and level
 script event integration are not playable in this crop. Interval blocks are
 unsupported. A lever without its handle cannot be operated; handle insertion
-still needs the inventory port. Out-of-crop/unresolved lever targets fail export
+is implemented in the tutorial adventure, but not this older standalone crop. Out-of-crop/unresolved lever targets fail export
 rather than being dropped. Every remaining crop object is listed with a reason
 in `assets/source/mechanisms.json`.
 
@@ -149,11 +151,12 @@ in `assets/source/mechanisms.json`.
    on the actual target. Emulator success alone does not establish hardware
    performance or complete original-physics fidelity.
 
-The default GBA build now loads four areas with visible-tile caching and a
+The default curated GBA preview build loads four areas with visible-tile caching and a
 complete title-to-finish preview route. Rat and arrow-trap placements use native
 C, with Lua-derived settings and a differential firing-schedule test. This does
 not finish the original room graph: preview exits are curated, revisiting rooms
-does not preserve arbitrary original progression, and unsupported enemies and
+does not preserve arbitrary original progression. The separate tutorial preserves
+its selected flags and mechanism states; unsupported enemies and
 level scripts remain explicit.
 
 ## Commands and truthful build status
