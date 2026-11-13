@@ -74,7 +74,7 @@ typedef struct retro_draw {
     retro_u8 flip_x;
 } retro_draw;
 
-/* backend capabilities are explicit; gameplay does not assume a 256px screen. */
+/* logical viewport in room units; a backend can render it at a different pixel scale. */
 typedef struct retro_video_caps {
     retro_u16 width;
     retro_u16 height;

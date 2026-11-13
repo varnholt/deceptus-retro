@@ -9,7 +9,7 @@ import zlib
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from assets import planar4
+from assets import planar4, scaled_actor, viewport_recipe
 from tiled import collision_grid, draw_object, layer_values, transform_tile, FLIP_X, FLIP_DIAGONAL
 
 
@@ -48,6 +48,25 @@ class CollisionTests(unittest.TestCase):
 
 
 class TileTests(unittest.TestCase):
+    def test_viewport_keeps_source_coordinates_and_expands_the_visible_area(self):
+        recipe = {"crop_pixels": [0, 0, 768, 336], "render_scale": [2, 3],
+                  "output_pixels": [512, 224], "collision_cell": 8}
+        viewport = viewport_recipe(recipe)
+        self.assertEqual((viewport["world_width"], viewport["world_height"]), (384, 336))
+        recipe["render_scale"] = [200, 300]
+        self.assertEqual(viewport_recipe(recipe), viewport)
+        recipe["render_scale"] = [1, 2]
+        with self.assertRaises(ValueError):
+            viewport_recipe(recipe)
+
+    def test_scaled_actor_keeps_its_feet_at_the_frame_origin(self):
+        image = Image.new("RGBA", (32, 48), (255, 0, 0, 255))
+        actor = scaled_actor(image, {"numerator": 2, "denominator": 3})
+        self.assertEqual(actor.size, (32, 48))
+        self.assertEqual(actor.getbbox(), (5, 16, 26, 48))
+        unchanged = scaled_actor(image, {"numerator": 1, "denominator": 1})
+        self.assertEqual(unchanged.tobytes(), image.tobytes())
+
     def test_generated_snes_maps_reconstruct_the_converted_room(self):
         folder = Path(__file__).resolve().parents[1] / "assets/generated"
         if not (folder / "room.map").exists():

@@ -1,3 +1,4 @@
+#include "asset_sizes.h"
 #include "retro/engine.h"
 
 #ifdef _WIN32
@@ -13,8 +14,8 @@ static retro_frame frame;
 PREVIEW_API void preview_init(void)
 {
     retro_video_caps video;
-    video.width = 256;
-    video.height = 224;
+    video.width = VIEWPORT_WORLD_WIDTH;
+    video.height = VIEWPORT_WORLD_HEIGHT;
     video.max_draws = RETRO_DRAW_CAPACITY;
     retro_init(&engine, &deceptus_room, &video);
     retro_render(&engine, &frame);
