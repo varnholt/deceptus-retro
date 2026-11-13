@@ -24,5 +24,5 @@ def compile_menu(data, output):
         for label,filename in [('gba_menu_texture','menu-texture.bin'),('gba_menu_palette','menu-texture.pal'),('gba_menu_map','menu-map.bin'),('gba_menu_sine','menu-sine.bin')]:
             handle.write('.balign 4\n.global '+label+'\n'+label+':\n.incbin "'+(output/filename).as_posix()+'"\n')
     header=(output/'gba_assets.h').read_text()
-    declarations='\n'.join('extern const retro_u8 '+label+'[];' for label in ('gba_menu_texture','gba_menu_palette','gba_menu_map','gba_menu_sine'))+'\n'
+    declarations='\n'.join('extern const deceptus_u8 '+label+'[];' for label in ('gba_menu_texture','gba_menu_palette','gba_menu_map','gba_menu_sine'))+'\n'
     (output/'gba_assets.h').write_text(header.replace('#endif',declarations+'#endif'))

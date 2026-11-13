@@ -1,15 +1,15 @@
 #if GBA_TUTORIAL
-static retro_u8 menu_active;
-static retro_u16 menu_angle;
-static retro_u8 menu_requested(void)
+static deceptus_u8 menu_active;
+static deceptus_u16 menu_angle;
+static deceptus_u8 menu_requested(void)
 {
-    return campaign.mode == RETRO_CAMPAIGN_TITLE || campaign.mode == RETRO_MENU_EXIT ||
-           ((campaign.mode == RETRO_MENU_OPTIONS || campaign.mode == RETRO_MENU_CONTROLS) &&
-            adventure.options_return == RETRO_CAMPAIGN_TITLE);
+    return campaign.mode == DECEPTUS_CAMPAIGN_TITLE || campaign.mode == DECEPTUS_MENU_EXIT ||
+           ((campaign.mode == DECEPTUS_MENU_OPTIONS || campaign.mode == DECEPTUS_MENU_CONTROLS) &&
+            adventure.options_return == DECEPTUS_CAMPAIGN_TITLE);
 }
 static void menu_prepare(void)
 {
-    retro_u8 requested;
+    deceptus_u8 requested;
     requested = menu_requested();
     if (requested && !menu_active) {
         REG_DISPLAY = 1 << 6;
@@ -35,17 +35,17 @@ static void menu_prepare(void)
 }
 static void menu_commit(void)
 {
-    retro_i16 sine, cosine;
-    const retro_i16 *table;
-    table = (const retro_i16 *)gba_menu_sine;
+    deceptus_i16 sine, cosine;
+    const deceptus_i16 *table;
+    table = (const deceptus_i16 *)gba_menu_sine;
     sine = table[menu_angle];
     cosine = table[(menu_angle + 1024) & 4095];
     REG16(0x04000020) = cosine;
     REG16(0x04000022) = -sine;
     REG16(0x04000024) = sine;
     REG16(0x04000026) = cosine;
-    REG32(0x04000028) = (retro_u32)(16384 - (retro_i32)cosine * 120 + (retro_i32)sine * 80);
-    REG32(0x0400002c) = (retro_u32)(16384 - (retro_i32)sine * 120 - (retro_i32)cosine * 80);
+    REG32(0x04000028) = (deceptus_u32)(16384 - (deceptus_i32)cosine * 120 + (deceptus_i32)sine * 80);
+    REG32(0x0400002c) = (deceptus_u32)(16384 - (deceptus_i32)sine * 120 - (deceptus_i32)cosine * 80);
     REG16(0x04000010) = hud_scroll_x;
     REG16(0x04000012) = hud_scroll_y;
     REG16(0x04000050) = (3 << 6) | (1 << 2);

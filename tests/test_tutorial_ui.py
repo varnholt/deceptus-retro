@@ -32,6 +32,12 @@ class TutorialTextTests(unittest.TestCase):
         self.assertEqual(large.tobytes(), expected.tobytes())
         self.assertEqual(TutorialUI.text_width('Deceptus',font,2), 2*TutorialUI.text_width('Deceptus',font))
 
+    def test_source_menus_encode_with_native_bitmap_font(self):
+        ui = TutorialUI(DATA)
+        for kind in ('main','pause','options','controls','inventory','confirm','exit'):
+            resource = ui.menu(kind)
+            self.assertLessEqual(ui.resources[resource][3],192)
+
     def test_dialogue_wrap_uses_rendered_width_and_leaves_button_clear(self):
         ui=TutorialUI.__new__(TutorialUI)
         ui.font=NativePixelFont(DATA/'fonts')

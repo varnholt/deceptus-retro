@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from tiled import TiledMap, collision_grid
+from tiled import TiledMap, collision_grid, layer_values, GID_MASK
 from palettes import banked_background, palette_rgb555
 from content import crop_mechanisms
 from world_export import export_world
@@ -39,6 +39,22 @@ def import_deceptus(data, recipe_path=None, source=SOURCE):
     one_way = tiled.render(crop, recipe["one_way_layers"], collision=True)
     collision.save(source / "collision.png")
     one_way.save(source / "one_way.png")
+    water = Image.new('L', tuple(crop[2:]))
+    if recipe.get('import_water'):
+        for layer, offset, _ in tiled.layers():
+            if layer.get('name') != 'atmosphere' or layer.tag != 'layer':
+                continue
+            values = layer_values(layer); columns = int(layer.get('width'))
+            for y in range(0,crop[3],8):
+                for x in range(0,crop[2],8):
+                    tx=int((crop[0]+x+4-offset[0])//tiled.tile_width); ty=int((crop[1]+y+4-offset[1])//tiled.tile_height)
+                    if not (0<=tx<columns and 0<=ty<int(layer.get('height'))): continue
+                    gid=values[ty*columns+tx]&GID_MASK
+                    if not gid: continue
+                    first,tileset,_=next(item for item in reversed(tiled.tilesets) if item[0]<=gid)
+                    if tileset.get('name')=='physics_tiles' and 48<=gid-first<=56:
+                        ImageDraw.Draw(water).rectangle((x,y,x+7,y+7),fill=255)
+    water.save(source/'water.png')
     animations = json.loads((data / "sprites" / "animations.json").read_text())
     original = Image.open(data / "sprites" / "player.png").convert("RGBA")
     sheet = Image.new("RGBA", (128, 336))

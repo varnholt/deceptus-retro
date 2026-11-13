@@ -53,7 +53,7 @@ def verify(core=CORE, rom=ROM):
             x, y, width, height = mechanism['bounds']
             masks.append((x - 4, y - 30, width + 12, max(height, 96)))
         for enemy in enemies:
-            if enemy['kind'] == 'RETRO_RAT':
+            if enemy['kind'] == 'DECEPTUS_RAT':
                 paths = json.loads((source / 'enemies.json').read_text())['paths']
                 points = paths[enemy['path_first']:enemy['path_first'] + enemy['path_count']]
                 xs = [point[0] for point in points]

@@ -1,5 +1,5 @@
 #include "asset_sizes.h"
-#include "retro/engine.h"
+#include "deceptus/engine.h"
 #include <snes.h>
 
 extern char room_patterns, room_patterns_end;
@@ -9,39 +9,39 @@ extern char room_map, room_map_end;
 extern char overflow_map, overflow_map_end;
 extern char actor_patterns, actor_patterns_end;
 extern char actor_palette, actor_palette_end;
-extern const retro_room deceptus_room;
+extern const deceptus_room deceptus_scene;
 
-static retro_engine engine;
-static retro_frame frame;
-static retro_video_caps video = {256, 224, 12};
-static retro_i16 accepted_top[RETRO_DRAW_CAPACITY];
-static retro_i16 accepted_bottom[RETRO_DRAW_CAPACITY];
+static deceptus_engine engine;
+static deceptus_frame frame;
+static deceptus_video_caps video = {256, 224, 12};
+static deceptus_i16 accepted_top[DECEPTUS_DRAW_CAPACITY];
+static deceptus_i16 accepted_bottom[DECEPTUS_DRAW_CAPACITY];
 
 /* a stable little-endian debug mailbox for emulator integration tests. */
-volatile retro_u16 retro_debug[16];
+volatile deceptus_u16 deceptus_debug[16];
 
-static retro_u16 input_read(void)
+static deceptus_u16 input_read(void)
 {
-    retro_u16 pad, buttons;
+    deceptus_u16 pad, buttons;
     pad = padsCurrent(0);
     buttons = 0;
     if (pad & KEY_LEFT) {
-        buttons |= RETRO_LEFT;
+        buttons |= DECEPTUS_LEFT;
     }
     if (pad & KEY_RIGHT) {
-        buttons |= RETRO_RIGHT;
+        buttons |= DECEPTUS_RIGHT;
     }
     if (pad & (KEY_B | KEY_A)) {
-        buttons |= RETRO_JUMP;
+        buttons |= DECEPTUS_JUMP;
     }
     if (pad & KEY_UP) {
-        buttons |= RETRO_UP;
+        buttons |= DECEPTUS_UP;
     }
     if (pad & KEY_START) {
-        buttons |= RETRO_PAUSE;
+        buttons |= DECEPTUS_PAUSE;
     }
     if (pad & KEY_SELECT) {
-        buttons |= RETRO_RESTART;
+        buttons |= DECEPTUS_RESTART;
     }
     return buttons;
 }
@@ -66,9 +66,9 @@ static void video_init(void)
 
 static void video_prepare(void)
 {
-    retro_u16 index, other, accepted, overlaps, object_id, tile_base, piece;
-    retro_i16 x, y;
-    const retro_draw *draw;
+    deceptus_u16 index, other, accepted, overlaps, object_id, tile_base, piece;
+    deceptus_i16 x, y;
+    const deceptus_draw *draw;
     oamClear(0, 0);
     object_id = 0;
     accepted = 0;
@@ -105,28 +105,28 @@ static void video_prepare(void)
 
 static void debug_write(void)
 {
-    retro_debug[0] = 0xD3CE;
-    retro_debug[1] = retro_floor(engine.entities[0].x);
-    retro_debug[2] = retro_floor(engine.entities[0].y);
-    retro_debug[3] = engine.camera_x;
-    retro_debug[4] = engine.ticks;
-    retro_debug[5] = engine.paused;
-    retro_debug[6] = engine.health;
-    retro_debug[7] = engine.entities[0].grounded;
-    retro_debug[8] = engine.door_entries;
-    retro_debug[9] = engine.event_count;
-    retro_debug[10] = frame.count;
-    retro_debug[11] = engine.entities[1].active;
-    retro_debug[12] = engine.checkpoint_id;
-    retro_debug[13] = engine.checkpoint_x;
-    retro_debug[14] = engine.checkpoint_y;
-    retro_debug[15] = engine.content_error;
+    deceptus_debug[0] = 0xD3CE;
+    deceptus_debug[1] = deceptus_floor(engine.entities[0].x);
+    deceptus_debug[2] = deceptus_floor(engine.entities[0].y);
+    deceptus_debug[3] = engine.camera_x;
+    deceptus_debug[4] = engine.ticks;
+    deceptus_debug[5] = engine.paused;
+    deceptus_debug[6] = engine.health;
+    deceptus_debug[7] = engine.entities[0].grounded;
+    deceptus_debug[8] = engine.door_entries;
+    deceptus_debug[9] = engine.event_count;
+    deceptus_debug[10] = frame.count;
+    deceptus_debug[11] = engine.entities[1].active;
+    deceptus_debug[12] = engine.checkpoint_id;
+    deceptus_debug[13] = engine.checkpoint_x;
+    deceptus_debug[14] = engine.checkpoint_y;
+    deceptus_debug[15] = engine.content_error;
 }
 
 int main(void)
 {
-    retro_u16 previous_vblank, current_vblank, elapsed, buttons;
-    retro_init(&engine, &deceptus_room, &video);
+    deceptus_u16 previous_vblank, current_vblank, elapsed, buttons;
+    deceptus_init(&engine, &deceptus_scene, &video);
     video_init();
     previous_vblank = snes_vblank_count - 1;
     while (1) {
@@ -140,10 +140,10 @@ int main(void)
         }
         buttons = input_read();
         while (elapsed) {
-            retro_tick(&engine, buttons);
+            deceptus_tick(&engine, buttons);
             --elapsed;
         }
-        retro_render(&engine, &frame);
+        deceptus_render(&engine, &frame);
         video_prepare();
         debug_write();
         WaitForVBlank();

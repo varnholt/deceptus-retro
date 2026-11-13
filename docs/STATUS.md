@@ -1,6 +1,6 @@
 # Current status
 
-Updated for local Playtest 05, 13 November 2026.
+Updated for local Playtest 06, 13 November 2026.
 
 ## Available targets
 
@@ -33,6 +33,11 @@ than assuming every adjacent room's walkways have identical heights.
 
 ## Latest presentation fixes
 
+- Original ground blob patrol, source animation, contact damage and stomp death.
+- Basic swimming with source water detection and full directional swim sprites.
+- Original foam/shrine tile animations, with fast source frames sampled at 60Hz.
+- Mechanism files named after their original counterparts; public C namespace `deceptus_`.
+- GitHub Actions build and source-revision-recorded cartridge artifacts.
 - Original bitmap font at 13px; title headings use exact 2x copies of those pixels.
 - Smooth affine title rotation, changing on 59 of 60 sampled display frames.
 - Whole wooden one-way floor artwork, with original foreground occlusion.
@@ -43,14 +48,15 @@ than assuming every adjacent room's walkways have identical heights.
 
 ## Evidence
 
-The local build passes eight native C test groups and forty Python conversion
+The local build passes nine native C test groups and forty-five Python conversion
 checks, including an exact comparison of large text against a nearest-neighbour
 2x copy of the original glyph rendering. SNES rebuild and Snes9x integration
 checks pass for the retained prototype.
 
 GBA checks boot the actual ROM and exercise menu navigation. Controlled-start
 fixtures check floor/UI scenes, the darkness warning, underwater visibility,
-water-surface rendering and a Crossroads/Fool's Ledge return trip. Their reports
+water-surface rendering, original foam/shrine frame advancement, a blob scene
+and a Crossroads/Fool's Ledge return trip. Their reports
 and screenshots are generated locally by `tools/verify_tutorial.py`. These are
 fixture checks, not a full tutorial input route. No physical hardware testing or
 complete-game performance guarantee is claimed.
@@ -60,12 +66,13 @@ complete-game performance guarantee is claimed.
 1. Finish and repeatedly play the original opening route under final movement
    tuning, including the Loop and descent to the Sewers. Resolve every required
    gate and source callback instead of adding progression shortcuts.
-2. Implement swimming, water entry/exit behavior and missing traversal abilities;
+2. Refine swimming/entry/exit fidelity, add reactive splashes and remaining traversal abilities;
    refine collision fidelity and profile demanding rooms.
 3. Complete cutscenes, dialogue presentation and original menu/inventory behavior.
 4. Port additional enemies and mechanisms to reusable C services, retaining
-   source settings and differential checks where possible. Rat and arrow trap
-   are implemented; other placed enemy families remain unsupported.
+   source settings and differential checks where possible. Rat, arrow trap and
+   normal ground blob are implemented; blob jump/drop variants and other enemy
+   families remain unsupported.
 5. Convert source music/SFX offline and add platform playback. Event ids have
    begun to be exposed, but no sound currently plays in the ROM or project player.
 6. Add persistent save storage and versioned progression serialization.
@@ -74,3 +81,6 @@ complete-game performance guarantee is claimed.
 The first commercial-quality target remains GBA. The reusable C engine can grow
 alongside that work; SNES is a secondary compatibility/performance effort and
 Mega Drive remains future work.
+
+The empty doorway reported in playtesting still needs its room/route identified
+before the missing connection can be matched to the original map.

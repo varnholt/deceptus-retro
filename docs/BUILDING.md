@@ -59,7 +59,8 @@ Some generated-resource checks skip when their inputs have not been built.
 Build the tutorial before claiming its conversion checks have run.
 
 Where available, `LUA_REFERENCE_SOURCE_DIR` supplies the original Lua sources
-for differential tests. Without them, expected-state checks run but do not
+for differential tests; a system Lua 5.4 installation is also supported. Without
+either, expected-state checks run but do not
 establish equivalence against actual Lua execution.
 
 ## Real GBA scene checks
@@ -108,3 +109,26 @@ the ROM, controls, build hash and source content notices. They are not a retail
 release process. Do not accidentally package a controlled-start test fixture
 as the playable game. Build folders, downloaded SDKs, original imports and ROMs
 are all excluded from version control.
+
+## GitHub Actions
+
+The `.github/workflows/build-gba.yml` workflow builds on Ubuntu 24.04 with LLVM,
+Python 3.13 and system Lua 5.4 for the source-reference tests. It runs on pushes
+to `main`, pull requests and manual **workflow_dispatch** runs.
+
+The original engine is checked out alongside this repository at the SHA in
+`SOURCE_REVISION`. Manual runs can supply another `engine_ref`. Keeping the
+revision explicit avoids silently changing game data underneath a code build;
+update that file when adopting an upstream content revision. The original
+repository currently permits public checkout, so no additional credential is
+required. Credentials are not persisted in either checkout.
+
+To download a cartridge: open the repository's **Actions** tab, select a
+successful **Build GBA** run, then download its `deceptus-gba-<commit>` artifact.
+The ZIP contains `Deceptus.gba`, controls, content notices and `BUILD.json` with
+both source revisions and the ROM hash. Artifacts are retained for fourteen days.
+Failed runs retain available diagnostics for seven days.
+
+CI runs native, Lua-reference and conversion checks. Local mGBA/Snes9x integration
+checks remain separate; a successful build action is not a full-game or hardware
+verification claim. Downloaded SDKs and generated artwork stay out of Git.

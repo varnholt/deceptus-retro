@@ -116,7 +116,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", choices=["gba", "snes", "host"], default="gba")
     parser.add_argument("--core", type=Path)
-    parser.add_argument("--library", type=Path, default=ROOT / "build/host/Debug/retro_preview.dll")
+    parser.add_argument("--library", type=Path, default=ROOT / "build/host/Debug/deceptus_preview.dll")
     parser.add_argument("--rom", type=Path, help="open a particular built ROM")
     args = parser.parse_args()
     core = args.core or ROOT / ('.tools/mgba/mgba_libretro.dll' if args.backend == 'gba' else '.tools/snes9x/snes9x_libretro.dll')

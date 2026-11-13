@@ -18,6 +18,7 @@ from emulator import Emulator, ROOT
 FIXTURES = [('floor', 2, 480, 336), ('exit', 2, 720, 576),
             ('dark', 4, 84, 288), ('water', 6, 448, 600),
             ('surface', 6, 420, 384), ('bed', 0, 270, 312),
+            ('shrine', 7, 580, 336), ('foam',6,420,384), ('blob',8,700,432),
             ('title', -1, 0, 0)]
 
 
@@ -34,14 +35,14 @@ def press(emulator, button):
     emulator.run(4)
 
 
-def verify(core, clang, linker, objcopy):
+def verify(core, clang, linker, objcopy, fixture_name=None):
     folder = ROOT / 'build/gba'
     manifest = json.loads((folder / 'build.json').read_text())
     if manifest['scene'] != 'tutorial':
         raise ValueError('build --scene tutorial before running tutorial fixtures')
     source = ROOT / 'src/platform/gba/main.c'
     original_main = source.read_text()
-    marker = 'retro_adventure_init(&adventure, &gba_tutorial_definition, &video);'
+    marker = 'deceptus_adventure_init(&adventure, &gba_tutorial_definition, &video);'
     if original_main.count(marker) != 1:
         raise ValueError('update the fixture entry hook for the current startup code')
     scratch = ROOT / 'build/tests/tutorial'
@@ -68,11 +69,12 @@ def verify(core, clang, linker, objcopy):
     build_gba.run = fixture_run
     try:
         for name, room, x, y in FIXTURES:
+            if fixture_name and name!=fixture_name: continue
             code = original_main
             if room >= 0:
                 setup = (f'\n campaign.room_index={room}; '
-                         f'retro_init(&engine,gba_campaign_definition.rooms[{room}],&video); '
-                         f'retro_place_player(&engine,{x},{y}); campaign.mode=RETRO_CAMPAIGN_PLAYING;')
+                         f'deceptus_init(&engine,gba_campaign_definition.rooms[{room}],&video); '
+                         f'deceptus_place_player(&engine,{x},{y}); campaign.mode=DECEPTUS_CAMPAIGN_PLAYING;')
                 code = code.replace(marker, marker + setup)
                 code = code.replace('active_stage = &gba_stages[0];',
                                     'active_stage = &gba_stages[campaign.room_index];')
@@ -129,6 +131,21 @@ def verify(core, clang, linker, objcopy):
                             assert vram[slot*32:(slot+1)*32] == patterns[pattern*32:(pattern+1)*32], 'surface tile mismatch'
                             checked += 1
                     assert checked, 'surface fixture did not show the animated region'
+                elif name in ('shrine','foam'):
+                    assert not state(emulator)[15],state(emulator)
+                    observed=set()
+                    for _ in range(90):
+                        emulator.run(1)
+                        if name=='shrine':
+                            observed.add(state(emulator)[34])
+                        else:
+                            vram=C.string_at(emulator.core.retro_get_memory_data(3),98304)
+                            observed.add(hashlib.sha256(vram[0xf000:0x10000]).hexdigest())
+                    assert len(observed)>5, (name,'source tile animation is not advancing',state(emulator))
+                    report[name+'_distinct_states']=len(observed)
+                elif name == 'blob':
+                    for _ in range(30):emulator.run(1)
+                    assert state(emulator)[11], 'original blob placement is missing'
                 elif name == 'title':
                     frames = []
                     for _ in range(60):
@@ -169,5 +186,6 @@ if __name__ == '__main__':
     parser.add_argument('--clang', default='clang')
     parser.add_argument('--linker', default='ld.lld')
     parser.add_argument('--objcopy', default='llvm-objcopy')
+    parser.add_argument('--fixture',choices=[entry[0] for entry in FIXTURES])
     args = parser.parse_args()
-    verify(args.core, args.clang, args.linker, args.objcopy)
+    verify(args.core, args.clang, args.linker, args.objcopy,args.fixture)

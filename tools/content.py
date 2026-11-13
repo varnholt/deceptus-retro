@@ -140,22 +140,23 @@ def inventory(data, output):
         "reachable_lua_modules": len(modules), "referenced_host_api": referenced_api,
         "compiled_callbacks": callback_support,
         "native_mechanism_family_placements": mechanism_counts,
-        "native_enemy_family_placements": {name: active_scripts[name] for name in ("rat.lua", "arrowtrap_2.lua") if name in active_scripts},
-        "unported_enemy_types": sorted(set(active_scripts) - {"rat.lua", "arrowtrap_2.lua"}),
+        "native_enemy_family_placements": {name: active_scripts[name] for name in ("rat.lua", "arrowtrap_2.lua", "blob_2.lua") if name in active_scripts},
+        "native_enemy_variant_limits": {"blob_2.lua": "normal ground patrol and stomp death; jumping and ceiling-drop variants remain unsupported"},
+        "unported_enemy_types": sorted(set(active_scripts) - {"rat.lua", "arrowtrap_2.lua", "blob_2.lua"}),
         "native_mechanism_scope": "C components; import validates supported settings; not all placements are loaded or drawn",
         "full_game_supported": False,
         "remaining": ["room/resource streaming", "remaining mechanisms", "enemy behavior and animations",
                       "complete level scripts and cutscenes", "inventory and progression", "audio", "persistent save backend"]}
     if "releaseSwordRing" in programs:
-        source = ['#include "retro/logic.h"', '', 'const retro_mechanism_def source_logic_definitions[] = {']
+        source = ['#include "deceptus/logic.h"', '', 'const deceptus_mechanism_def source_logic_definitions[] = {']
         for obj in callback_objects:
-            kind = "RETRO_MECH_BLOCK" if obj["group"] == "blocking_rects" else "RETRO_MECH_FLAG"
+            kind = "DECEPTUS_MECH_BLOCK" if obj["group"] == "blocking_rects" else "DECEPTUS_MECH_FLAG"
             source.append(f'    {{{obj["id"]}, {{0, 0, 24, 24}}, 0, 0, 0, {kind}, 1, 0}},')
-        source += ['};', f'const retro_u16 source_logic_definition_count = {len(callback_objects)};',
+        source += ['};', f'const deceptus_u16 source_logic_definition_count = {len(callback_objects)};',
                    'const char *const source_logic_names[] = {' + ','.join(json.dumps(obj['name']) for obj in callback_objects) + '};',
                    'const char *const source_logic_groups[] = {' + ','.join(json.dumps(obj['group']) for obj in callback_objects) + '};',
-                   'const retro_u8 source_logic_program[] = {' + ','.join(map(str, programs["releaseSwordRing"])) + '};',
-                   f'const retro_u16 source_logic_program_length = {len(programs["releaseSwordRing"])};', '']
+                   'const deceptus_u8 source_logic_program[] = {' + ','.join(map(str, programs["releaseSwordRing"])) + '};',
+                   f'const deceptus_u16 source_logic_program_length = {len(programs["releaseSwordRing"])};', '']
         (output / "source_logic.c").write_text("\n".join(source))
     (output / "catalog.json").write_text(json.dumps({"levels": levels, "lua": modules, "summary": summary}, indent=2) + "\n")
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
@@ -167,9 +168,9 @@ def crop_mechanisms(data, recipe):
     """Export the implemented rectangle semantics; report every remaining object."""
     root, objects = map_objects(Path(data) / recipe["map"])
     left, top, width, height = recipe["crop_pixels"]
-    supported = {"checkpoints": "RETRO_MECH_CHECKPOINT", "sensor_rects": "RETRO_MECH_SENSOR",
-                 "levers": "RETRO_MECH_LEVER", "blocking_rects": "RETRO_MECH_BLOCK",
-                 "collapsing_platforms": "RETRO_MECH_COLLAPSING", "on_off_blocks": "RETRO_MECH_BLOCK", "spike_blocks": "RETRO_MECH_SPIKES", "damage_rects": "RETRO_MECH_DAMAGE"}
+    supported = {"checkpoints": "DECEPTUS_MECH_CHECKPOINT", "sensor_rects": "DECEPTUS_MECH_SENSOR",
+                 "levers": "DECEPTUS_MECH_LEVER", "blocking_rects": "DECEPTUS_MECH_BLOCK",
+                 "collapsing_platforms": "DECEPTUS_MECH_COLLAPSING", "on_off_blocks": "DECEPTUS_MECH_BLOCK", "spike_blocks": "DECEPTUS_MECH_SPIKES", "damage_rects": "DECEPTUS_MECH_DAMAGE"}
     selected, unsupported = [], []
     for obj in objects:
         if obj["x"] >= left + width or obj["y"] >= top + height or obj["x"] + max(1, obj["width"]) <= left or obj["y"] + max(1, obj["height"]) <= top:

@@ -66,7 +66,7 @@ def build(data, clang='clang', linker='ld.lld', objcopy='llvm-objcopy', full_gam
              '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-ffunction-sections', '-fdata-sections',
              '-std=c90', '-Wall', '-Wextra', '-Werror', '-I' + str(ROOT / 'include'),
              '-I' + str(ROOT / 'assets/generated/gba'), '-I' + str(platform / 'freestanding')]
-    sources = [ROOT / 'src/engine/adventure.c', ROOT / 'src/engine/animation.c', ROOT / 'src/engine/world.c', ROOT / 'src/engine/entities.c', ROOT / 'src/engine/mechanisms.c',
+    sources = [ROOT / 'src/engine/player/playerwater.c', ROOT / 'src/engine/adventure.c', ROOT / 'src/engine/animation.c', ROOT / 'src/engine/world.c', ROOT / 'src/engine/entities.c', ROOT / 'src/engine/mechanisms.c',
                ROOT / 'src/engine/logic.c', ROOT / 'src/engine/enemies.c', ROOT / 'src/game/deceptus.c', ROOT / 'src/game/campaign.c', platform / 'main.c',
                platform / 'runtime.c', ROOT / 'assets/generated/gba/room.c']
     objects = []

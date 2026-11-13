@@ -112,7 +112,7 @@ class TutorialUI:
         self.presentations.append((action,first_page,*cue,*anchor))
 
     def menu(self, kind, selection=0):
-        image=Image.new('RGBA',(240,160));draw=ImageDraw.Draw(image)
+        image=Image.new('RGBA',(240,160))
         title_font=self.font
         title={'main':'Deceptus','options':'Options','controls':'Controls','inventory':'Inventory','confirm':'Quit Game?','exit':'Quit','pause':''}[kind]
         self.text(image,((240-self.text_width(title,title_font,2))/2,10),title,title_font,(127,171,253,255),2)
@@ -152,9 +152,9 @@ class TutorialUI:
         with (output/'data.s').open('a') as handle:
             handle.write('.balign 4\n.global gba_ui_blob\ngba_ui_blob:\n.incbin "'+(output/'ui.bin').as_posix()+'"\n')
         header=(output/'gba_assets.h').read_text()
-        declarations=['typedef struct gba_ui_resource { retro_u32 graphics, palette, map; retro_u16 patterns; retro_u8 columns, rows; } gba_ui_resource;',
-            'typedef struct gba_ui_presentation { const retro_interaction *action; retro_u16 page_first, cue_first, cue_count; retro_i16 x,y; } gba_ui_presentation;',
-            'extern const retro_u8 gba_ui_blob[];', 'extern const gba_ui_resource gba_ui_resources[];',
+        declarations=['typedef struct gba_ui_resource { deceptus_u32 graphics, palette, map; deceptus_u16 patterns; deceptus_u8 columns, rows; } gba_ui_resource;',
+            'typedef struct gba_ui_presentation { const deceptus_interaction *action; deceptus_u16 page_first, cue_first, cue_count; deceptus_i16 x,y; } gba_ui_presentation;',
+            'extern const deceptus_u8 gba_ui_blob[];', 'extern const gba_ui_resource gba_ui_resources[];',
             'extern const gba_ui_presentation gba_ui_presentations[];', f'#define GBA_UI_PRESENTATIONS {len(self.presentations)}']
         (output/'gba_assets.h').write_text(header.replace('#endif','\n'.join(declarations)+'\n#endif'))
         lines=['const gba_ui_resource gba_ui_resources[] = {']
@@ -163,7 +163,7 @@ class TutorialUI:
         lines += ['    {&'+action+', '+','.join(map(str,values))+'},' for action,*values in self.presentations]
         lines += ['};']
         for kind,resources in self.menu_ids.items():
-            declarations.append('extern const retro_u16 gba_menu_'+kind+'[];')
-            lines.append('const retro_u16 gba_menu_'+kind+'[] = {'+','.join(map(str,resources))+'};')
+            declarations.append('extern const deceptus_u16 gba_menu_'+kind+'[];')
+            lines.append('const deceptus_u16 gba_menu_'+kind+'[] = {'+','.join(map(str,resources))+'};')
         (output/'gba_assets.h').write_text(header.replace('#endif','\n'.join(declarations)+'\n#endif'))
         return '\n'.join(lines)+'\n'

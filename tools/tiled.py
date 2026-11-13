@@ -152,7 +152,21 @@ class TiledMap:
             elif element.tag in ("layer", "objectgroup"):
                 yield element, position, shown
 
-    def tile(self, gid, collision=False):
+    def tile(self, gid, collision=False, time_ms=None):
+        if not collision and time_ms is not None:
+            raw = gid & GID_MASK
+            first, tileset, _ = next(entry for entry in reversed(self.tilesets) if entry[0] <= raw)
+            animation = tileset.find(f"tile[@id='{raw-first}']/animation")
+            if animation is not None:
+                frames = [(int(frame.get('tileid')),int(frame.get('duration'))) for frame in animation]
+                if not frames or any(duration <= 0 for _,duration in frames):
+                    raise ValueError('invalid source tile animation')
+                phase = time_ms % sum(duration for _,duration in frames)
+                for tile_id,duration in frames:
+                    if phase < duration:
+                        gid = (gid & ~GID_MASK) | (first+tile_id)
+                        break
+                    phase -= duration
         key = gid, collision
         if key in self.cache:
             return self.cache[key]
@@ -181,7 +195,7 @@ class TiledMap:
         self.cache[key] = image
         return image
 
-    def render(self, crop, names, collision=False):
+    def render(self, crop, names, collision=False, time_ms=None):
         left, top, width, height = crop
         canvas = Image.new("L" if collision else "RGBA", (width, height))
         layers = [(element, offset) for element, offset, _ in self.layers()
@@ -203,7 +217,7 @@ class TiledMap:
                     gid = values[tile_y * columns + tile_x]
                     if not gid:
                         continue
-                    tile = self.tile(gid, collision)
+                    tile = self.tile(gid, collision, time_ms)
                     position = (round(tile_x * self.tile_width + offset[0] - left),
                                 round(tile_y * self.tile_height + offset[1] - top))
                     if collision:

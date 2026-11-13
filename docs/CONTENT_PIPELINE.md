@@ -37,8 +37,8 @@ RGB value survives the console palette limit.
 The tutorial separates foreground layers using source z values relative to the
 player. Both `level_solid_onesided` and `level_soild_onesided_dec` are visual
 layers as well as supplying one-way floor data; omitting their artwork leaves
-only fragments of wooden platforms. Opaque water-body/foam artwork is currently
-baked behind the player so it cannot hide the actor or its animated surface.
+only fragments of wooden platforms. Opaque water-body artwork is currently baked behind the player. Animated foam
+uses the original foreground layer and alpha, independently of the baked waves.
 Full original water compositing/stencil behavior remains unfinished.
 
 `psd_layers.py` reads original PSD layer channels with their declared lengths.
@@ -64,8 +64,9 @@ locker contents, lever handle and the monk's current idle pose. Original frame
 durations are compiled into bounded playback tables. Flags select patches;
 picking up an item does not require maintaining a second hand-edited image.
 
-Swimming physics, reactive splashes, full water tile animation and original
-cutscene actor choreography are separate missing features.
+Basic swimming now uses the original atmosphere tiles and full source player
+frames. Reactive splashes, bubbles, complete water effects and original cutscene
+actor choreography remain unfinished.
 
 ## Reports and limits
 
@@ -78,3 +79,21 @@ normal build verifies a selected supported subset, not complete source coverage.
 Never commit `assets/source/`, `assets/generated/`, downloaded tools or binary
 build outputs. Preserve the original content ownership/dependency notices when
 sharing a generated ROM.
+
+## Original animated tiles
+
+`tileanimation.py` reads Tiled animation frame ids and durations directly from
+the original tilesets. Current bindings include the foam and blue shrine column.
+Background and foreground clips have separate pattern residency and alpha rules,
+so an opaque wave patch does not replace animated foreground foam.
+
+Some source animations run faster than 60Hz. Frames with no display tick are
+sampled out using cumulative timing; they never become zero-duration runtime
+frames that reset a clip. Original source frame indices/durations remain in the
+generated report. Visible pixels are copied from the source frames, never drawn
+by a replacement effect. The existing spring-based water-surface bake is kept.
+
+Normal ground blobs are imported from the original placement and `blob_2.lua`
+constants. Jump/drop properties are explicitly rejected for this native subset.
+The current shared GBA resource library has 474 frames, including full swim
+poses and the blob's original idle, movement and death artwork.

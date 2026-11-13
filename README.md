@@ -1,4 +1,4 @@
-# Deceptus Retro
+# Deceptus C Engine
 
 A portable C game engine and console adaptation of Deceptus. **GBA is the first
 complete-game target.** A working SNES prototype is retained; Mega Drive is a
@@ -23,7 +23,7 @@ Keep both checkouts beside one another:
 ```text
 workspace/
   deceptus_engine/data/
-  deceptus-retro/          this repository; may still be named deceptus-snes
+  deceptus-deceptus/          this repository; may still be named deceptus-snes
 ```
 
 Install Python, the requirements below, and LLVM with `clang`, `ld.lld` and
@@ -62,10 +62,13 @@ audio playback are not implemented yet.
 
 ## Current development build
 
-Playtest 05 uses the original Deceptum bitmap font at its authored 13px size.
+Playtest 06 uses the original Deceptum bitmap font at its authored 13px size.
 Large headings are exact 2x pixel copies, not newly rasterized 24px glyphs.
 The opening also includes:
 
+- Original ground-patrol blob, including its animated movement, contact damage and stomp death.
+- Basic swimming using source atmosphere tiles, original swim sprites and a delayed A-button ascent.
+- Original animated foam and shrine-column tiles, played independently on their source layers.
 - New Game, Options and Quit; pause, controls, inventory and quit confirmation.
 - Native-size dialogue windows, paged source text and animated interaction cues.
 - The key, locker, lever handle and missing-handle rules, plus persistent flags
@@ -73,7 +76,7 @@ The opening also includes:
 - Original room entrance rectangles, including Crossroads to Fool's Ledge.
 - Original one-way floor decoration and player occlusion by foreground artwork.
 - Streamed room graphics and offline baked water surfaces; the player remains
-  visible underwater. Swimming and reactive splashes remain unfinished.
+  visible underwater. Reactive entry splashes and complete water/progression fidelity remain unfinished.
 
 See [current status](docs/STATUS.md) for verified coverage and open work. Imported
 rooms and working isolated actions do not establish a complete playable route.
@@ -112,6 +115,13 @@ python tools/build_snes.py
 python tools/emulator.py
 python tools/play.py --backend snes
 ```
+
+## Automated builds
+
+The **Build GBA** GitHub Actions workflow runs on pushes and pull requests and
+can be started manually. It checks out the original game data at `SOURCE_REVISION`,
+builds the C engine and tutorial, runs tests, and uploads a downloadable cartridge
+artifact. See [CI builds](docs/BUILDING.md#github-actions) for the download steps.
 
 ## Project guide
 

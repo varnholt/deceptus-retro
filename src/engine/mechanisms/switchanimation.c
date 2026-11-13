@@ -1,12 +1,12 @@
 /* shared onoffblock/spikeblock animation, retaining their original frame rules. */
 /* private mechanism implementation; compiled through ../mechanisms.c. */
 
-static void animate_switch(retro_mechanism_set *set, retro_u16 index)
+static void animate_switch(deceptus_mechanism_set *set, deceptus_u16 index)
 {
-    retro_mechanism_state *state;
-    retro_u8 end, enabled;
+    deceptus_mechanism_state *state;
+    deceptus_u8 end, enabled;
     state = &set->states[index];
-    end = set->definitions[index].kind == RETRO_MECH_SPIKES ? 39 : 31;
+    end = set->definitions[index].kind == DECEPTUS_MECH_SPIKES ? 39 : 31;
     if (state->frame != state->target_frame) {
         state->fraction += 2;
         if (state->fraction >= 3) {
@@ -21,7 +21,7 @@ static void animate_switch(retro_mechanism_set *set, retro_u16 index)
         enabled = state->pending & 1;
         state->pending >>= 1;
         --state->pending_count;
-        if (set->definitions[index].kind == RETRO_MECH_BLOCK && (set->definitions[index].flags & RETRO_MECH_INVERTED)) {
+        if (set->definitions[index].kind == DECEPTUS_MECH_BLOCK && (set->definitions[index].flags & DECEPTUS_MECH_INVERTED)) {
             enabled = !enabled;
         }
         state->active = enabled;

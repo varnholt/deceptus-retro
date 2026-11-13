@@ -90,9 +90,9 @@ Room loads clear cache mappings before switching the palette and source tables.
 
 Actor and mechanism sprites use 8bpp OBJ graphics with disjoint palette ranges
 where required by the loaded scene. All opaque source RGB555 sprite colours are
-preserved. The shared ROM library contains 387 source frames: lever, spike,
-on/off block, collapsing-platform, rat, trap-body/muzzle and rotated arrow
-frames. Visible resources share uploads by id, within 32KiB OBJ VRAM and 128 OAM
+preserved. The shared ROM library contains 474 source frames: lever, spike,
+on/off block, collapsing-platform, rat, trap-body/muzzle, rotated arrow,
+directional player swim and ground-blob frames. Visible resources share uploads by id, within 32KiB OBJ VRAM and 128 OAM
 entries. Incompatible overlapping animated palettes or excess resources fail
 explicitly; general palette allocation for arbitrary scenes remains unfinished.
 
@@ -131,6 +131,10 @@ labels are shifted into their own scratch patterns so they stay on screen
 while the world indicator moves. Transient room names reserve separate patterns
 when a cue replaces the ordinary font resource, avoiding glyph corruption.
 
+Original Tiled foam uses an independently timed foreground clip; the shrine
+column uses its source background animation. Source frames faster than 60Hz
+are sampled without emitting zero-duration runtime frames.
+
 The title changes to mode 1 with an affine BG2 starmap texture and BG0 text.
 A 4,096-entry sine table updates the matrix every rendered frame. It uses a
 native 128x128 crop from the original starmap texture, without a runtime 3D mesh.
@@ -157,7 +161,7 @@ restart, briefings, spike death, collapsing collision, arrow damage, checkpoint
 recovery, streaming pixels in each area and 1,274 display frames of simulation
 at one tick per display frame. The ZIP includes its ROM-hash-matched report.
 
-Native tests reconstruct full backgrounds, decode all 387 source sprite frames,
+Native tests reconstruct full backgrounds, decode all 474 source sprite frames,
 exercise campaign transitions and mechanism queues, and compare C arrow firing
 against execution of the actual Lua script when the original Lua sources are
 available. Existing SNES and standalone GBA ROM routes still run.

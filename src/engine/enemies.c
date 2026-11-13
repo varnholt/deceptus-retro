@@ -1,7 +1,7 @@
-#include "retro/enemies.h"
-#include "retro/physics.h"
+#include "deceptus/enemies.h"
+#include "deceptus/physics.h"
 
-static retro_fixed approach(retro_fixed current, retro_fixed target, retro_fixed step)
+static deceptus_fixed approach(deceptus_fixed current, deceptus_fixed target, deceptus_fixed step)
 {
     if (current < target) {
         current += step;
@@ -14,12 +14,14 @@ static retro_fixed approach(retro_fixed current, retro_fixed target, retro_fixed
     return current;
 }
 
-void retro_enemies_init(retro_engine *engine)
+#include "enemies/blob_2.c"
+
+void deceptus_enemies_init(deceptus_engine *engine)
 {
-    retro_u16 index, point;
-    retro_i16 row;
-    const retro_enemy_def *definition;
-    retro_entity *entity;
+    deceptus_u16 index, point;
+    deceptus_i16 row;
+    const deceptus_enemy_def *definition;
+    deceptus_entity *entity;
     if (engine->room->enemy_count > 8 || (engine->room->enemy_count && !engine->room->enemy_definitions)) {
         engine->content_error = 6;
         return;
@@ -29,12 +31,13 @@ void retro_enemies_init(retro_engine *engine)
         if (definition->path_first > engine->room->enemy_path_count ||
             definition->path_count > engine->room->enemy_path_count - definition->path_first ||
             (definition->path_count && !engine->room->enemy_paths) || definition->alignment > 3 ||
-            (definition->kind != RETRO_RAT && definition->kind != RETRO_ARROW_TRAP) ||
-            definition->animation_fps != 20 || definition->speed <= 0 || definition->speed >= RETRO_FIXED(8)) {
+            (definition->kind != DECEPTUS_RAT && definition->kind != DECEPTUS_ARROW_TRAP &&
+             definition->kind != DECEPTUS_BLOB_2) ||
+            definition->animation_fps != 20 || definition->speed <= 0 || definition->speed >= DECEPTUS_FIXED(8)) {
             engine->content_error = 6;
             return;
         }
-        if (definition->kind == RETRO_RAT) {
+        if (definition->kind == DECEPTUS_RAT) {
             if (!definition->path_count || definition->path_count > 8 || !definition->acceleration) {
                 engine->content_error = 6;
                 return;
@@ -45,45 +48,54 @@ void retro_enemies_init(retro_engine *engine)
                     return;
                 }
             }
+        } else if (definition->kind == DECEPTUS_BLOB_2) {
+            if (!definition->path_count || !definition->acceleration) {
+                engine->content_error = 6;
+                return;
+            }
         } else if (!definition->period || definition->period >= 65000) {
             engine->content_error = 6;
             return;
         }
-        entity = retro_spawn(engine, definition->kind, definition->x, definition->y);
+        entity = deceptus_spawn(engine, definition->kind, definition->x, definition->y);
         if (!entity) {
             engine->content_error = 6;
             return;
         }
-        entity->definition = (retro_u8)index;
+        entity->definition = (deceptus_u8)index;
         entity->random_seed = definition->source_id;
         entity->timer = definition->time_offset;
-        if (definition->kind == RETRO_RAT) {
+        if (definition->kind == DECEPTUS_BLOB_2) {
+            entity->target = definition->path_count > 1 ? 1 : 0;
+            entity->y += DECEPTUS_FIXED(12);
+        }
+        if (definition->kind == DECEPTUS_RAT) {
             entity->state = 1;
             entity->target = definition->path_count > 1 ? 1 : 0;
-            entity->y += RETRO_FIXED(14);
-            row = retro_position_cell(entity->y);
-            while (row > 0 && (retro_cell(engine->room, retro_position_cell(entity->x), row) & RETRO_SOLID)) {
+            entity->y += DECEPTUS_FIXED(14);
+            row = deceptus_position_cell(entity->y);
+            while (row > 0 && (deceptus_cell(engine->room, deceptus_position_cell(entity->x), row) & DECEPTUS_SOLID)) {
                 --row;
             }
-            if (row < retro_position_cell(entity->y)) {
-                entity->y = RETRO_FIXED((row + 1) * 8);
+            if (row < deceptus_position_cell(entity->y)) {
+                entity->y = DECEPTUS_FIXED((row + 1) * 8);
             }
         }
     }
 }
 
-static void rat_tick(retro_engine *engine, retro_entity *rat, const retro_enemy_def *definition)
+static void rat_tick(deceptus_engine *engine, deceptus_entity *rat, const deceptus_enemy_def *definition)
 {
-    retro_i16 distance;
-    retro_u8 column, choice;
-    const retro_path_point *point;
+    deceptus_i16 distance;
+    deceptus_u8 column, choice;
+    const deceptus_path_point *point;
     if (rat->pause_ticks) {
         --rat->pause_ticks;
     } else {
         if (++rat->timer >= definition->cycles[rat->state] * 3) {
             rat->timer = 0;
-            rat->random_seed = (retro_u16)(rat->random_seed * 17U + 31U);
-            choice = (retro_u8)((rat->random_seed >> 8) & 3);
+            rat->random_seed = (deceptus_u16)(rat->random_seed * 17U + 31U);
+            choice = (deceptus_u8)((rat->random_seed >> 8) & 3);
             if (rat->state == 0) {
                 if (rat->arrived) {
                     rat->state = 4;
@@ -107,7 +119,7 @@ static void rat_tick(retro_engine *engine, retro_entity *rat, const retro_enemy_
     }
     if (rat->state == 0 && !rat->arrived) {
         point = &engine->room->enemy_paths[definition->path_first + rat->target];
-        distance = point->x - retro_floor(rat->x);
+        distance = point->x - deceptus_floor(rat->x);
         if (distance >= -1 && distance <= 1) {
             rat->arrived = 1;
             rat->velocity_x = 0;
@@ -124,9 +136,9 @@ static void rat_tick(retro_engine *engine, retro_entity *rat, const retro_enemy_
     if (rat->velocity_y > 80) {
         rat->velocity_y = 80;
     }
-    retro_move_horizontal_dynamic(engine->room, rat, 7, 14, &engine->mechanisms);
-    retro_move_vertical_dynamic(engine->room, rat, 7, 14, &engine->mechanisms);
-    column = (retro_u8)(rat->timer / 3);
+    deceptus_move_horizontal_dynamic(engine->room, rat, 7, 14, &engine->mechanisms);
+    deceptus_move_vertical_dynamic(engine->room, rat, 7, 14, &engine->mechanisms);
+    column = (deceptus_u8)(rat->timer / 3);
     if (column >= definition->cycles[rat->state]) {
         column = 0;
     }
@@ -136,12 +148,12 @@ static void rat_tick(retro_engine *engine, retro_entity *rat, const retro_enemy_
     rat->frame = rat->state * 14 + (rat->facing_left ? 0 : 7) + column;
 }
 
-static void fire_arrow(retro_engine *engine, const retro_entity *trap, const retro_enemy_def *definition,
-                       retro_u8 muzzle)
+static void fire_arrow(deceptus_engine *engine, const deceptus_entity *trap, const deceptus_enemy_def *definition,
+                       deceptus_u8 muzzle)
 {
-    retro_u16 index;
-    retro_projectile *arrow;
-    for (index = 0; index < RETRO_PROJECTILE_CAPACITY; ++index) {
+    deceptus_u16 index;
+    deceptus_projectile *arrow;
+    for (index = 0; index < DECEPTUS_PROJECTILE_CAPACITY; ++index) {
         arrow = &engine->projectiles[index];
         if (arrow->active) {
             continue;
@@ -156,12 +168,12 @@ static void fire_arrow(retro_engine *engine, const retro_entity *trap, const ret
         arrow->x = trap->x;
         arrow->y = trap->y;
         if (definition->alignment < 2) {
-            arrow->x += RETRO_FIXED(definition->alignment ? 36 : -16);
-            arrow->y += RETRO_FIXED(3 + muzzle * 8);
+            arrow->x += DECEPTUS_FIXED(definition->alignment ? 36 : -16);
+            arrow->y += DECEPTUS_FIXED(3 + muzzle * 8);
             arrow->velocity_x = definition->alignment ? definition->speed : -definition->speed;
         } else {
-            arrow->x += RETRO_FIXED(4 + muzzle * 8);
-            arrow->y += RETRO_FIXED(definition->alignment == 2 ? 40 : -16);
+            arrow->x += DECEPTUS_FIXED(4 + muzzle * 8);
+            arrow->y += DECEPTUS_FIXED(definition->alignment == 2 ? 40 : -16);
             arrow->velocity_y = definition->alignment == 2 ? definition->speed : -definition->speed;
         }
         ++engine->projectiles_fired;
@@ -169,25 +181,33 @@ static void fire_arrow(retro_engine *engine, const retro_entity *trap, const ret
     }
 }
 
-retro_u16 retro_enemies_tick(retro_engine *engine)
+deceptus_u16 deceptus_enemies_tick(deceptus_engine *engine)
 {
-    retro_u16 index, muzzle, damage;
-    retro_i16 x, y, dx, dy;
-    retro_entity *enemy;
-    retro_projectile *arrow;
-    const retro_enemy_def *definition;
+    deceptus_u16 index, muzzle, damage;
+    deceptus_i16 x, y, dx, dy;
+    deceptus_entity *enemy;
+    deceptus_projectile *arrow;
+    const deceptus_enemy_def *definition;
     damage = 0;
-    for (index = 1; index < RETRO_ENTITY_CAPACITY; ++index) {
+    for (index = 1; index < DECEPTUS_ENTITY_CAPACITY; ++index) {
         enemy = &engine->entities[index];
-        if (!enemy->active || (enemy->kind != RETRO_RAT && enemy->kind != RETRO_ARROW_TRAP)) {
+        if (!enemy->active ||
+            (enemy->kind != DECEPTUS_RAT && enemy->kind != DECEPTUS_ARROW_TRAP && enemy->kind != DECEPTUS_BLOB_2)) {
             continue;
         }
         definition = &engine->room->enemy_definitions[enemy->definition];
-        if (enemy->kind == RETRO_RAT) {
+        if (enemy->kind == DECEPTUS_BLOB_2) {
+            deceptus_u16 contact;
+            blob_2_tick(engine, enemy, definition);
+            contact = blob_2_contact(engine, enemy, definition);
+            if (contact > damage) {
+                damage = contact;
+            }
+        } else if (enemy->kind == DECEPTUS_RAT) {
             rat_tick(engine, enemy, definition);
-            dx = retro_floor(enemy->x) - retro_floor(engine->entities[0].x);
-            dy = retro_floor(enemy->y) - retro_floor(engine->entities[0].y);
-            if (dx > -15 && dx < 15 && dy > -RETRO_PLAYER_HEIGHT(&engine->entities[0]) && dy < 14 &&
+            dx = deceptus_floor(enemy->x) - deceptus_floor(engine->entities[0].x);
+            dy = deceptus_floor(enemy->y) - deceptus_floor(engine->entities[0].y);
+            if (dx > -15 && dx < 15 && dy > -DECEPTUS_PLAYER_HEIGHT(&engine->entities[0]) && dy < 14 &&
                 definition->damage > damage) {
                 damage = definition->damage;
             }
@@ -198,14 +218,14 @@ retro_u16 retro_enemies_tick(retro_engine *engine)
             }
             for (muzzle = 0; muzzle < 3; ++muzzle) {
                 if (!(enemy->fired & (1 << muzzle)) && enemy->timer >= definition->delays[muzzle] + 12) {
-                    fire_arrow(engine, enemy, definition, (retro_u8)muzzle);
-                    enemy->fired |= (retro_u8)(1 << muzzle);
+                    fire_arrow(engine, enemy, definition, (deceptus_u8)muzzle);
+                    enemy->fired |= (deceptus_u8)(1 << muzzle);
                 }
             }
             enemy->frame = definition->alignment;
         }
     }
-    for (index = 0; index < RETRO_PROJECTILE_CAPACITY; ++index) {
+    for (index = 0; index < DECEPTUS_PROJECTILE_CAPACITY; ++index) {
         arrow = &engine->projectiles[index];
         if (!arrow->active) {
             continue;
@@ -220,21 +240,21 @@ retro_u16 retro_enemies_tick(retro_engine *engine)
         } else {
             arrow->gravity += 53;
         }
-        if (arrow->velocity_y >= RETRO_FIXED(8)) {
-            arrow->velocity_y = RETRO_FIXED(8) - 1;
+        if (arrow->velocity_y >= DECEPTUS_FIXED(8)) {
+            arrow->velocity_y = DECEPTUS_FIXED(8) - 1;
         }
         arrow->x += arrow->velocity_x;
         arrow->y += arrow->velocity_y;
-        x = retro_floor(arrow->x);
-        y = retro_floor(arrow->y);
+        x = deceptus_floor(arrow->x);
+        y = deceptus_floor(arrow->y);
         if (x < 0 || y < 0 || x >= engine->room->columns * 8 || y >= engine->room->rows * 8 ||
-            (retro_cell(engine->room, retro_position_cell(arrow->x), retro_position_cell(arrow->y)) & RETRO_SOLID)) {
+            (deceptus_cell(engine->room, deceptus_position_cell(arrow->x), deceptus_position_cell(arrow->y)) & DECEPTUS_SOLID)) {
             arrow->active = 0;
             continue;
         }
-        dx = x - retro_floor(engine->entities[0].x);
-        dy = y - retro_floor(engine->entities[0].y);
-        if (dx >= -9 && dx <= 9 && dy >= -RETRO_PLAYER_HEIGHT(&engine->entities[0]) && dy <= 0) {
+        dx = x - deceptus_floor(engine->entities[0].x);
+        dy = y - deceptus_floor(engine->entities[0].y);
+        if (dx >= -9 && dx <= 9 && dy >= -DECEPTUS_PLAYER_HEIGHT(&engine->entities[0]) && dy <= 0) {
             if (arrow->damage > damage) {
                 damage = arrow->damage;
             }
@@ -244,14 +264,14 @@ retro_u16 retro_enemies_tick(retro_engine *engine)
     return damage;
 }
 
-static void draw_enemy(const retro_engine *engine, retro_frame *frame, retro_u8 kind, retro_u8 image, retro_i16 x,
-                       retro_i16 y, retro_i16 width, retro_i16 height)
+static void draw_enemy(const deceptus_engine *engine, deceptus_frame *frame, deceptus_u8 kind, deceptus_u8 image, deceptus_i16 x,
+                       deceptus_i16 y, deceptus_i16 width, deceptus_i16 height)
 {
-    retro_draw *draw;
+    deceptus_draw *draw;
     x -= engine->camera_x;
     y -= engine->camera_y;
     if (x <= -width || y <= -height || x >= engine->video.width || y >= engine->video.height ||
-        frame->count >= RETRO_DRAW_CAPACITY || frame->count >= engine->video.max_draws) {
+        frame->count >= DECEPTUS_DRAW_CAPACITY || frame->count >= engine->video.max_draws) {
         return;
     }
     draw = &frame->draws[frame->count++];
@@ -263,32 +283,34 @@ static void draw_enemy(const retro_engine *engine, retro_frame *frame, retro_u8 
     draw->flip_x = 0;
 }
 
-void retro_enemies_render(const retro_engine *engine, retro_frame *frame)
+void deceptus_enemies_render(const deceptus_engine *engine, deceptus_frame *frame)
 {
-    retro_u16 index, muzzle, image, elapsed;
-    retro_i16 x, y;
-    const retro_entity *enemy;
-    const retro_enemy_def *definition;
-    const retro_projectile *arrow;
-    for (index = 0; index < RETRO_PROJECTILE_CAPACITY; ++index) {
+    deceptus_u16 index, muzzle, image, elapsed;
+    deceptus_i16 x, y;
+    const deceptus_entity *enemy;
+    const deceptus_enemy_def *definition;
+    const deceptus_projectile *arrow;
+    for (index = 0; index < DECEPTUS_PROJECTILE_CAPACITY; ++index) {
         arrow = &engine->projectiles[index];
         if (arrow->active) {
-            draw_enemy(engine, frame, RETRO_ARROW, (retro_u8)(arrow->alignment * 4 + (arrow->age / 5) % 4),
-                       retro_floor(arrow->x) - 12, retro_floor(arrow->y) - 12, 32, 32);
+            draw_enemy(engine, frame, DECEPTUS_ARROW, (deceptus_u8)(arrow->alignment * 4 + (arrow->age / 5) % 4),
+                       deceptus_floor(arrow->x) - 12, deceptus_floor(arrow->y) - 12, 32, 32);
         }
     }
-    for (index = 1; index < RETRO_ENTITY_CAPACITY; ++index) {
+    for (index = 1; index < DECEPTUS_ENTITY_CAPACITY; ++index) {
         enemy = &engine->entities[index];
         if (!enemy->active) {
             continue;
         }
-        x = retro_floor(enemy->x);
-        y = retro_floor(enemy->y);
-        if (enemy->kind == RETRO_RAT) {
-            draw_enemy(engine, frame, RETRO_RAT, enemy->frame, x - 12, y - 26, 32, 32);
-        } else if (enemy->kind == RETRO_ARROW_TRAP) {
+        x = deceptus_floor(enemy->x);
+        y = deceptus_floor(enemy->y);
+        if (enemy->kind == DECEPTUS_BLOB_2) {
+            draw_enemy(engine, frame, DECEPTUS_BLOB_2, enemy->frame, x - 36, y - 48, 80, 80);
+        } else if (enemy->kind == DECEPTUS_RAT) {
+            draw_enemy(engine, frame, DECEPTUS_RAT, enemy->frame, x - 12, y - 26, 32, 32);
+        } else if (enemy->kind == DECEPTUS_ARROW_TRAP) {
             definition = &engine->room->enemy_definitions[enemy->definition];
-            draw_enemy(engine, frame, RETRO_ARROW_TRAP, definition->alignment, x - 24, y - 24, 80, 80);
+            draw_enemy(engine, frame, DECEPTUS_ARROW_TRAP, definition->alignment, x - 24, y - 24, 80, 80);
             for (muzzle = 0; muzzle < 3; ++muzzle) {
                 elapsed = enemy->timer;
                 if (elapsed <= definition->delays[muzzle]) {
@@ -297,13 +319,13 @@ void retro_enemies_render(const retro_engine *engine, retro_frame *frame)
                         image = 5;
                     }
                 } else {
-                    elapsed = (retro_u16)(elapsed - definition->delays[muzzle]);
+                    elapsed = (deceptus_u16)(elapsed - definition->delays[muzzle]);
                     image = 5 + elapsed / 3;
                     if (image > 9) {
                         image = 9;
                     }
                 }
-                draw_enemy(engine, frame, RETRO_ARROW_MUZZLE, (retro_u8)(definition->alignment * 10 + image),
+                draw_enemy(engine, frame, DECEPTUS_ARROW_MUZZLE, (deceptus_u8)(definition->alignment * 10 + image),
                            x + (definition->alignment < 2 ? (definition->alignment ? 24 : -24) : muzzle * 8),
                            y + (definition->alignment < 2 ? muzzle * 8 : (definition->alignment == 2 ? 24 : -24)), 32,
                            32);

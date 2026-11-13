@@ -82,6 +82,14 @@ def compile_streamed_background(image, output, animations=(), foreground=None):
     converted, banks, metrics = banked_background(atlas, bank_count=15)
     preview = converted.crop((0, 0, image.width, image.height))
     preview.save(output / 'base-background-preview.png')
+    pixels = np.asarray(converted).copy()
+    for clip in animations:
+        if clip.get('plane'):
+            for index, frame in enumerate(clip['frames']):
+                start=clip['atlas_y']+index*frame.height
+                mask=np.asarray(frame.convert('RGBA'))[:,:,3]>=128
+                pixels[start:start+frame.height,:frame.width][~mask]=0
+    updated=Image.fromarray(pixels,mode='P');updated.putpalette(converted.getpalette());converted=updated
     if foreground is not None:
         pixels = np.asarray(converted).copy()
         mask = np.asarray(foreground.convert('RGBA'))[:,:,3] >= 128
@@ -102,18 +110,17 @@ def compile_streamed_background(image, output, animations=(), foreground=None):
         for frame_index in range(clip['frame_count']):
             y = clip['atlas_y'] + frame_index * clip['bounds'][3]
             converted.crop((0, y, clip['bounds'][2], y + clip['bounds'][3])).save(folder / f'converted-{frame_index}.png')
-    patterns, lookup, cells = [bytes(32)], {bytes(32): 0}, []
+    patterns, cells = [bytes(32)], []
+    lookups = [{bytes(32):0},{bytes(32):0}]
     animation_cells = []
     foreground_cells = []
-    regions = [(0, image.width, image.height, cells, None)]
+    regions = [(0, image.width, image.height, cells, None, 0)]
     for clip in animations:
-        regions.append((clip['atlas_y'], clip['bounds'][2], clip['bounds'][3] * clip['frame_count'], animation_cells, clip))
+        regions.append((clip['atlas_y'], clip['bounds'][2], clip['bounds'][3] * clip['frame_count'], animation_cells, clip, clip.get('plane',0)))
     if foreground is not None:
-        regions.append((foreground_top,image.width,image.height,foreground_cells,None))
-    for region_top, region_width, region_height, destination, clip in regions:
-        if destination is foreground_cells:
-            # each plane has its own character block and residency pool.
-            lookup = {bytes(32):0}
+        regions.append((foreground_top,image.width,image.height,foreground_cells,None,1))
+    for region_top, region_width, region_height, destination, clip, plane in regions:
+        lookup = lookups[plane]
         if clip is not None:
             clip['cell_offset'] = len(animation_cells) * 2
         for top in range(region_top, region_top + region_height, 8):
@@ -149,7 +156,7 @@ def compile_streamed_background(image, output, animations=(), foreground=None):
 
 
 def compile_actors(image, output):
-    rgba = np.asarray(image.convert('RGBA'), dtype=np.uint8)
+    rgba = np.asarray(image.crop((0,0,128,336)).convert('RGBA'), dtype=np.uint8)
     opaque = rgba[:, :, 3] >= 128
     rgb5 = rgba[:, :, :3] >> 3
     colours = sorted(set(map(tuple, rgb5[opaque].tolist())))
@@ -192,14 +199,25 @@ def compile_mechanisms(data, output):
                       ('rat.png', 24, 24, 7, 70, 200, 12, True),
                       ('trap-body', 72, 72, 8, 4, 52, 24, True),
                       ('trap-muzzles', 24, 24, 8, 40, 52, 24, True),
-                      ('../weapons/arrow.png', 24, 24, 15, 16, 80, 16, True)]
+                      ('../weapons/arrow.png', 24, 24, 15, 16, 80, 16, True),
+                      ('player-swim',72,48,8,26,128,32,True),
+                      ('enemy_blob_2.png',72,72,16,61,96,32,True)]
     for filename, width, height, columns, count, palette_first, palette_count, shared in specifications:
-        actual_filename = 'enemy_arrowtrap_2.png' if filename.startswith('trap-') else filename
+        actual_filename = 'player.png' if filename=='player-swim' else 'enemy_arrowtrap_2.png' if filename.startswith('trap-') else filename
         atlas = Image.open(data / 'sprites' / actual_filename).convert('RGBA')
         rects, rotations = [], []
         for index in range(count):
             rotation = None
-            if filename == 'trap-body':
+            if filename=='enemy_blob_2.png':
+                row=0 if index<15 else 1 if index<31 else 2 if index<47 else 5
+                column=index if index<15 else index-15 if index<31 else index-31 if index<47 else index-47
+                rect=[column*72,row*72,72,72]
+            elif filename == 'player-swim':
+                phase=index%13;side='l' if index>=13 else 'r'
+                spec=json.loads((data/'sprites/animations.json').read_text())[('player_swim_idle_' if phase<5 else 'player_swim_')+side]
+                sx,sy=spec['frame_offset'];step=phase if phase<5 else phase-5
+                rect=[sx+step*72,sy,72,48]
+            elif filename == 'trap-body':
                 x, y = [(0, 0), (0, 72), (360, 0), (360, 72)][index]
                 rect = [x, y, 72, 72]
             elif filename == 'trap-muzzles':
@@ -277,6 +295,9 @@ def compile_assets(data, scene="lever", recipe_path=None):
         if not streamed:
             raise ValueError('conditional scenery requires a streamed room')
         animations += variants(data, recipe, room)
+    if recipe.get('tile_animations'):
+        from tileanimation import bake_tile_animations
+        animations += bake_tile_animations(data,recipe)
     if len(animations) > 4:
         raise ValueError('room exceeds four background animation clips')
     foreground = Image.open(source/'foreground.png').convert('RGBA') if recipe.get('foreground_layers') else None
@@ -298,7 +319,7 @@ def compile_assets(data, scene="lever", recipe_path=None):
                 x, y, width, height = clip['bounds']
                 handle.write('    {' + ','.join(map(str, [x//8, y//8, width//8, height//8, clip['frame_count'], clip['frame_ticks']])) +
                              f', gba_animation_cells + {clip["cell_offset"]}, {clip.get("required_flags",0)}, {clip.get("forbidden_flags",0)}, ' +
-                             (f'(const retro_u16 *)(gba_animation_durations + {clip["duration_offset"]})' if clip.get('frame_durations') else '0') + '},\n')
+                             (f'(const deceptus_u16 *)(gba_animation_durations + {clip["duration_offset"]})' if clip.get('frame_durations') else '0') + ', ' + str(clip.get('plane',0)) + '},\n')
             handle.write('};\n')
     resources = [('gba_background0', 'background0.bin'), ('gba_background1', 'background1.bin'),
                  ('gba_map0', 'map0.bin'), ('gba_map1', 'map1.bin'),
@@ -309,16 +330,16 @@ def compile_assets(data, scene="lever", recipe_path=None):
         resources += [('gba_stream_patterns', 'stream-patterns.bin'), ('gba_stream_cells', 'stream-cells.bin'),
                       ('gba_animation_cells', 'animation-cells.bin'), ('gba_foreground_cells','foreground-cells.bin'), ('gba_animation_durations','animation-durations.bin')]
     assembly = ['.section .rodata.gba_assets,"a",%progbits']
-    header = ['#ifndef GBA_ASSETS_H', '#define GBA_ASSETS_H', '#include "retro/types.h"']
+    header = ['#ifndef GBA_ASSETS_H', '#define GBA_ASSETS_H', '#include "deceptus/types.h"']
     for label, filename in resources:
         assembly += ['.balign 4', f'.global {label}', f'{label}:', f'.incbin "{(OUTPUT / filename).as_posix()}"']
-        header += [f'extern const retro_u8 {label}[];', f'#define {label.upper()}_BYTES {(OUTPUT / filename).stat().st_size}']
+        header += [f'extern const deceptus_u8 {label}[];', f'#define {label.upper()}_BYTES {(OUTPUT / filename).stat().st_size}']
     header += ['#define GBA_CAMPAIGN 0', f'#define GBA_LAYERED_BACKGROUND {int(foreground is not None)}', f'#define GBA_STREAMED_BACKGROUND {int(streamed)}', f'#define GBA_ROOM_COLUMNS {room.width // 8}', f'#define GBA_ROOM_ROWS {room.height // 8}', f'#define GBA_PATTERN_COUNT {patterns}',
                f'#define GBA_BACKGROUND_ANIMATION_COUNT {len(animations)}', f'#define GBA_BACKGROUND_ANIMATION_CAPACITY {len(animations)}', '#define GBA_TUTORIAL 0',
-               'typedef struct gba_background_animation { retro_u16 left, top, columns, rows, frames, frame_ticks; const retro_u8 *cells; retro_u16 required_flags, forbidden_flags; const retro_u16 *durations; } gba_background_animation;',
+               'typedef struct gba_background_animation { deceptus_u16 left, top, columns, rows, frames, frame_ticks; const deceptus_u8 *cells; deceptus_u16 required_flags, forbidden_flags; const deceptus_u16 *durations; deceptus_u8 plane; } gba_background_animation;',
                'extern const gba_background_animation gba_background_animations[];']
-    header += ['typedef struct gba_mechanism_resource { retro_u32 offset; retro_u32 palette_offset; retro_u16 bytes; retro_u8 columns, rows, palette_first, palette_count; retro_u16 reserved; } gba_mechanism_resource;',
-               '#define GBA_LEVER_FIRST 0', '#define GBA_SPIKES_FIRST 33', '#define GBA_BLOCK_FIRST 73', '#define GBA_COLLAPSE_FIRST 105', '#define GBA_RAT_FIRST 257', '#define GBA_TRAP_FIRST 327', '#define GBA_MUZZLE_FIRST 331', '#define GBA_ARROW_FIRST 371',
+    header += ['typedef struct gba_mechanism_resource { deceptus_u32 offset; deceptus_u32 palette_offset; deceptus_u16 bytes; deceptus_u8 columns, rows, palette_first, palette_count; deceptus_u16 reserved; } gba_mechanism_resource;',
+               '#define GBA_LEVER_FIRST 0', '#define GBA_SPIKES_FIRST 33', '#define GBA_BLOCK_FIRST 73', '#define GBA_COLLAPSE_FIRST 105', '#define GBA_RAT_FIRST 257', '#define GBA_TRAP_FIRST 327', '#define GBA_MUZZLE_FIRST 331', '#define GBA_ARROW_FIRST 371', '#define GBA_SWIM_FIRST 387', '#define GBA_BLOB_FIRST 413',
                f'#define GBA_MECHANISM_FRAME_COUNT {mechanism_frames}',
                '#define GBA_ACTOR_FRAME_BYTES 1536', f'#define GBA_ACTOR_FRAME_COUNT {ACTOR_FRAME_COUNT}', '#endif', '']
     (OUTPUT / 'data.s').write_text('\n'.join(assembly) + '\n')

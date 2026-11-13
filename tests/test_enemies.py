@@ -17,19 +17,19 @@ class EnemyImportTests(unittest.TestCase):
         self.assertEqual(values['CYCLE_LENGTHS'], [7, 7, 5, 7, 3])
         result = crop_enemies(DATA, json.loads((ROOT / 'assets/rooms/gba-cell.json').read_text()))
         definition = result['definitions'][0]
-        self.assertEqual((definition['source_id'], definition['kind']), (111, 'RETRO_RAT'))
+        self.assertEqual((definition['source_id'], definition['kind']), (111, 'DECEPTUS_RAT'))
         self.assertEqual((definition['speed'], definition['acceleration']), (10, 1))
         self.assertEqual(result['paths'], [[374, 302], [504, 288]])
 
     def test_arrow_timing_comes_from_source_initialization(self):
         if not DATA.exists(): self.skipTest('original checkout is required')
         result = crop_enemies(DATA, json.loads((ROOT / 'assets/rooms/gba-preview.json').read_text()))
-        definition = result['definitions'][0]
+        definition = next(item for item in result['definitions'] if item['source_id']==1059)
         self.assertEqual(definition['source_id'], 1059)
         self.assertEqual(definition['delays'], [60, 75, 90])
         self.assertEqual((definition['period'], definition['speed'], definition['damage']), (180, 96, 60))
         self.assertTrue(any(item['id'] == 1049 and 'leaves loaded room' in item['reason'] for item in result['unsupported']))
-        self.assertTrue(any(item['script'] == 'blob_2.lua' for item in result['unsupported']))
+        self.assertTrue(any(item['kind'] == 'DECEPTUS_BLOB_2' for item in result['definitions']))
 
     def test_unsupported_enemies_are_reported(self):
         obj = dict(id=20, group='enemies', x=10, y=10, rotation=0, properties={'script': 'unported.lua'})

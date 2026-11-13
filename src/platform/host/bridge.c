@@ -1,4 +1,4 @@
-#include "retro/engine.h"
+#include "deceptus/engine.h"
 
 #ifdef _WIN32
 #define PREVIEW_API __declspec(dllexport)
@@ -6,24 +6,24 @@
 #define PREVIEW_API __attribute__((visibility("default")))
 #endif
 
-extern const retro_room deceptus_room;
-static retro_engine engine;
-static retro_frame frame;
+extern const deceptus_room deceptus_scene;
+static deceptus_engine engine;
+static deceptus_frame frame;
 
 PREVIEW_API void preview_init(void)
 {
-    retro_video_caps video;
+    deceptus_video_caps video;
     video.width = 256;
     video.height = 224;
-    video.max_draws = RETRO_DRAW_CAPACITY;
-    retro_init(&engine, &deceptus_room, &video);
-    retro_render(&engine, &frame);
+    video.max_draws = DECEPTUS_DRAW_CAPACITY;
+    deceptus_init(&engine, &deceptus_scene, &video);
+    deceptus_render(&engine, &frame);
 }
 
 PREVIEW_API void preview_tick(int buttons)
 {
-    retro_tick(&engine, (retro_u16)buttons);
-    retro_render(&engine, &frame);
+    deceptus_tick(&engine, (deceptus_u16)buttons);
+    deceptus_render(&engine, &frame);
 }
 
 /* integer getters avoid exposing target-specific C struct alignment to Python. */
@@ -31,9 +31,9 @@ PREVIEW_API int preview_state(int field)
 {
     switch (field) {
     case 0:
-        return retro_floor(engine.entities[0].x);
+        return deceptus_floor(engine.entities[0].x);
     case 1:
-        return retro_floor(engine.entities[0].y);
+        return deceptus_floor(engine.entities[0].y);
     case 2:
         return engine.camera_x;
     case 3:

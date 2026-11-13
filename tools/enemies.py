@@ -36,9 +36,11 @@ def crop_enemies(data, recipe):
         if obj['group'] != 'enemies' or not (left <= obj['x'] < left + width and top <= obj['y'] < top + height):
             continue
         script = obj['properties'].get('script')
-        if script not in ('rat.lua', 'arrowtrap_2.lua') or obj['rotation']:
+        if script not in ('rat.lua', 'arrowtrap_2.lua', 'blob_2.lua') or obj['rotation']:
             unsupported.append(dict(id=obj['id'], script=script, reason='enemy behavior not ported'))
             continue
+        if script=='blob_2.lua' and any(key in obj['properties'] for key in ('gravity_scale','jump_height_px','jump_interval_ms')):
+            unsupported.append(dict(id=obj['id'],script=script,reason='blob jump/drop variant not ported'));continue
         path = Path(data) / 'scripts/enemies' / script
         values = constants(path)
         hashes[script] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -49,7 +51,7 @@ def crop_enemies(data, recipe):
             raise ValueError(f'enemy {obj["id"]}: patrol path needs x/y pairs')
         if len(raw_path) == 2:
             raw_path = [int(obj['x']), int(obj['y'])] + raw_path
-        if script == 'rat.lua' and not raw_path:
+        if script in ('rat.lua','blob_2.lua') and not raw_path:
             raise ValueError(f'rat {obj["id"]}: no authored patrol path')
         points = [[x-left, y-top] for x, y in zip(raw_path[::2], raw_path[1::2])]
         if any(not (0 <= x < width and 0 <= y < height) for x, y in points):
@@ -62,15 +64,17 @@ def crop_enemies(data, recipe):
         if alignment is None:
             raise ValueError('invalid arrow-trap alignment')
         rat = script == 'rat.lua'
-        definitions.append(dict(source_id=obj['id'], kind='RETRO_RAT' if rat else 'RETRO_ARROW_TRAP',
+        blob = script == 'blob_2.lua'
+        patrol = rat or blob
+        definitions.append(dict(source_id=obj['id'], kind='DECEPTUS_RAT' if rat else 'DECEPTUS_BLOB_2' if blob else 'DECEPTUS_ARROW_TRAP',
             x=int(obj['x'])-left, y=int(obj['y'])-top, path_first=first, path_count=len(paths)-first,
             alignment=alignment, time_offset=round(float(obj['properties'].get('time_offset_s', 0))*60),
-            speed=round((props['velocity_walk_max'] if rat else values['_speed'] * 5) * 48/60*16),
+            speed=round((props['velocity_walk_max'] if patrol else values['_speed'] * 5) * 48/60*16),
             acceleration=round(props.get('acceleration_ground', 0)*48/60*16),
-            damage=int(props['damage'] if rat else 60),
-            period=0 if rat else round(values['_fire_interval']*60),
-            delays=[0,0,0] if rat else [round(value*60) for value in values['_fire_delays']],
-            cycles=values.get('CYCLE_LENGTHS', [0]*5),
+            damage=int(props['damage'] if patrol else 60),
+            period=0 if patrol else round(values['_fire_interval']*60),
+            delays=[0,0,0] if patrol else [round(value*60) for value in values['_fire_delays']],
+            cycles=([values[k] for k in ('SPRITE_COUNT_IDLE','SPRITE_COUNT_LEFT','SPRITE_COUNT_RIGHT','SPRITE_COUNT_DEATH','IDLE_CYCLE_COUNT')] if blob else values.get('CYCLE_LENGTHS', [0]*5)),
             animation_fps=int(values.get('ANIMATION_SPEED', 20)),
             idle_ticks=round(values.get('DELAY_BETWEEN_IDLE_FRAMES', 0)*60)))
     for definition in definitions:
@@ -78,7 +82,7 @@ def crop_enemies(data, recipe):
             raise ValueError('enemy motion or animation exceeds the supported fixed-step contract')
         if any(not 0 <= definition[key] <= 65534 for key in ('source_id', 'time_offset', 'damage', 'period')):
             raise ValueError('enemy property exceeds the 16-bit runtime budget')
-        if definition['kind'] == 'RETRO_RAT' and (not definition['acceleration'] or not 0 <= definition['idle_ticks'] <= 255):
+        if definition['kind'] == 'DECEPTUS_RAT' and (not definition['acceleration'] or not 0 <= definition['idle_ticks'] <= 255):
             raise ValueError('unsupported rat movement or idle timing')
         if any(not 0 <= delay <= 65520 for delay in definition['delays']):
             raise ValueError('trap delay exceeds runtime budget')

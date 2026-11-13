@@ -1,18 +1,18 @@
-#include "retro/engine.h"
+#include "deceptus/engine.h"
 #include <string.h>
 
-retro_entity *retro_spawn(retro_engine *engine, retro_u8 kind, retro_i16 x, retro_i16 y)
+deceptus_entity *deceptus_spawn(deceptus_engine *engine, deceptus_u8 kind, deceptus_i16 x, deceptus_i16 y)
 {
-    retro_u16 index;
-    retro_entity *entity;
-    for (index = 0; index < RETRO_ENTITY_CAPACITY; ++index) {
+    deceptus_u16 index;
+    deceptus_entity *entity;
+    for (index = 0; index < DECEPTUS_ENTITY_CAPACITY; ++index) {
         entity = &engine->entities[index];
         if (!entity->active) {
             memset(entity, 0, sizeof(*entity));
             entity->active = 1;
             entity->kind = kind;
-            entity->x = RETRO_FIXED(x);
-            entity->y = RETRO_FIXED(y);
+            entity->x = DECEPTUS_FIXED(x);
+            entity->y = DECEPTUS_FIXED(y);
             return entity;
         }
     }

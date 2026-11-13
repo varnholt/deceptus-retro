@@ -115,7 +115,7 @@ class GbaGraphicsTests(unittest.TestCase):
         graphics = (folder / 'mechanisms.bin').read_bytes()
         palettes = (folder / 'mechanisms.pal').read_bytes()
         table = (folder / 'mechanisms.tbl').read_bytes()
-        self.assertEqual(len(manifest), 387)
+        self.assertEqual(len(manifest), 474)
         atlases = {}
         for resource, frame in enumerate(manifest):
             if frame['source'] not in atlases:

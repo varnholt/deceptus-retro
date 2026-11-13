@@ -3,30 +3,30 @@
 #define GBA_CACHE_SLOTS 1535
 #define GBA_VISIBLE_CELLS 704
 #define GBA_STREAM_JOBS (GBA_LAYERED_BACKGROUND ? 1408 : 704)
-static retro_u16 pattern_slots[GBA_PATTERN_COUNT];
-static retro_u16 slot_patterns[GBA_CACHE_SLOTS];
-static retro_u16 used_slots[GBA_CACHE_SLOTS];
-static retro_u16 stream_maps[2][2048] __attribute__((aligned(4)));
-static retro_u16 stream_patterns[GBA_STREAM_JOBS], stream_slots[GBA_STREAM_JOBS];
+static deceptus_u16 pattern_slots[GBA_PATTERN_COUNT];
+static deceptus_u16 slot_patterns[GBA_CACHE_SLOTS];
+static deceptus_u16 used_slots[GBA_CACHE_SLOTS];
+static deceptus_u16 stream_maps[2][2048] __attribute__((aligned(4)));
+static deceptus_u16 stream_patterns[GBA_STREAM_JOBS], stream_slots[GBA_STREAM_JOBS];
 #if !GBA_LAYERED_BACKGROUND
-static const retro_u16 *stream_cells[GBA_VISIBLE_CELLS];
+static const deceptus_u16 *stream_cells[GBA_VISIBLE_CELLS];
 #endif
 #if GBA_LAYERED_BACKGROUND
-static retro_u16 foreground_cursor = 1024;
-static retro_u8 background_dirty[4];
+static deceptus_u16 foreground_cursor = 1024;
+static deceptus_u8 background_dirty[4];
 #endif
-static retro_u16 stream_jobs, stream_cursor = 1;
-static retro_i16 stream_x = -1, stream_y = -1;
-static retro_u8 stream_changed;
+static deceptus_u16 stream_jobs, stream_cursor = 1;
+static deceptus_i16 stream_x = -1, stream_y = -1;
+static deceptus_u8 stream_changed;
 #if GBA_BACKGROUND_ANIMATION_CAPACITY
-#include "retro/animation.h"
-static retro_animation background_clocks[GBA_BACKGROUND_ANIMATION_CAPACITY];
-static retro_u16 background_previous_tick, background_previous_flags;
+#include "deceptus/animation.h"
+static deceptus_animation background_clocks[GBA_BACKGROUND_ANIMATION_CAPACITY];
+static deceptus_u16 background_previous_tick, background_previous_flags;
 #endif
 
 static void background_reset(void)
 {
-    retro_u16 index;
+    deceptus_u16 index;
     for (index = 0; index < GBA_PATTERN_COUNT; ++index) {
         pattern_slots[index] = 0;
     }
@@ -46,42 +46,52 @@ static void background_reset(void)
     stream_y = -1;
 #if GBA_BACKGROUND_ANIMATION_CAPACITY
     for (index = 0; index < GBA_BACKGROUND_ANIMATION_COUNT; ++index) {
-        retro_animation_reset(&background_clocks[index]);
+        deceptus_animation_reset(&background_clocks[index]);
     }
     background_previous_tick = engine.ticks;
     background_previous_flags = GBA_SCENERY_FLAGS;
 #endif
 }
 
-static const retro_u16 *background_cell(retro_u16 column, retro_u16 row)
+static const deceptus_u16 *background_cell(deceptus_u16 column, deceptus_u16 row, deceptus_u8 plane)
 {
 #if GBA_BACKGROUND_ANIMATION_CAPACITY
-    retro_u16 index;
-    retro_u32 address;
+    deceptus_u16 index;
+    deceptus_u32 address;
     const gba_background_animation *clip;
     for (index = 0; index < GBA_BACKGROUND_ANIMATION_COUNT; ++index) {
         clip = &gba_background_animations[index];
+        if (clip->plane != plane) {
+            continue;
+        }
         if ((GBA_SCENERY_FLAGS & clip->required_flags) != clip->required_flags ||
             (GBA_SCENERY_FLAGS & clip->forbidden_flags)) {
             continue;
         }
         if (column >= clip->left && column < clip->left + clip->columns && row >= clip->top &&
             row < clip->top + clip->rows) {
-            address = ((retro_u32)background_clocks[index].frame * clip->rows + row - clip->top) * clip->columns +
+            address = ((deceptus_u32)background_clocks[index].frame * clip->rows + row - clip->top) * clip->columns +
                       column - clip->left;
-            return (const retro_u16 *)clip->cells + address * 2;
+            return (const deceptus_u16 *)clip->cells + address * 2;
         }
     }
 #endif
     if (column >= GBA_ROOM_COLUMNS || row >= GBA_ROOM_ROWS) {
         return 0;
     }
-    return (const retro_u16 *)gba_stream_cells + ((retro_u32)row * GBA_ROOM_COLUMNS + column) * 2;
+#if GBA_LAYERED_BACKGROUND
+    if (plane) {
+        return (const deceptus_u16 *)gba_foreground_cells + ((deceptus_u32)row * GBA_ROOM_COLUMNS + column) * 2;
+    }
+#else
+    (void)plane;
+#endif
+    return (const deceptus_u16 *)gba_stream_cells + ((deceptus_u32)row * GBA_ROOM_COLUMNS + column) * 2;
 }
 
-static retro_u16 background_resident(retro_u16 pattern, retro_u8 plane)
+static deceptus_u16 background_resident(deceptus_u16 pattern, deceptus_u8 plane)
 {
-    retro_u16 slot, old, first, limit, *cursor, attempts;
+    deceptus_u16 slot, old, first, limit, *cursor, attempts;
     if (!pattern) {
         return 0;
     }
@@ -132,9 +142,9 @@ static retro_u16 background_resident(retro_u16 pattern, retro_u8 plane)
 }
 
 #if GBA_LAYERED_BACKGROUND
-static void background_remove(retro_u16 column, retro_u16 row, retro_u8 plane)
+static void background_remove(deceptus_u16 column, deceptus_u16 row, deceptus_u8 plane)
 {
-    retro_u16 address, slot;
+    deceptus_u16 address, slot;
     address = ((column & 63) >> 5) * 1024 + (row & 31) * 32 + (column & 31);
     slot = stream_maps[plane][address] & 1023;
     if (!slot) {
@@ -147,17 +157,11 @@ static void background_remove(retro_u16 column, retro_u16 row, retro_u8 plane)
         --used_slots[slot];
     }
 }
-static void background_add(retro_u16 column, retro_u16 row, retro_u8 plane)
+static void background_add(deceptus_u16 column, deceptus_u16 row, deceptus_u8 plane)
 {
-    const retro_u16 *cell;
-    retro_u16 pattern, slot, attributes, address;
-    if (plane) {
-        cell = column < GBA_ROOM_COLUMNS && row < GBA_ROOM_ROWS
-                   ? (const retro_u16 *)gba_foreground_cells + ((retro_u32)row * GBA_ROOM_COLUMNS + column) * 2
-                   : 0;
-    } else {
-        cell = background_cell(column, row);
-    }
+    const deceptus_u16 *cell;
+    deceptus_u16 pattern, slot, attributes, address;
+    cell = background_cell(column, row, plane);
     pattern = cell ? cell[0] : 0;
     attributes = cell ? cell[1] : 0;
     slot = pattern ? pattern_slots[pattern] : 0;
@@ -169,7 +173,7 @@ static void background_add(retro_u16 column, retro_u16 row, retro_u8 plane)
     address = ((column & 63) >> 5) * 1024 + (row & 31) * 32 + (column & 31);
     stream_maps[plane][address] = attributes | (slot && plane ? slot - 1023 : slot);
 }
-static void background_edge(retro_u16 column, retro_u16 row, retro_u8 add)
+static void background_edge(deceptus_u16 column, deceptus_u16 row, deceptus_u8 add)
 {
     if (add) {
         background_add(column, row, 0);
@@ -179,13 +183,13 @@ static void background_edge(retro_u16 column, retro_u16 row, retro_u8 add)
         background_remove(column, row, 1);
     }
 }
-static void background_scroll(retro_u16 left, retro_u16 top)
+static void background_scroll(deceptus_u16 left, deceptus_u16 top)
 {
-    retro_u16 index, column, row, first, last, edge;
-    retro_i16 dx, dy;
+    deceptus_u16 index, column, row, first, last, edge;
+    deceptus_i16 dx, dy;
     const gba_background_animation *clip;
-    dx = (retro_i16)left - stream_x;
-    dy = (retro_i16)top - stream_y;
+    dx = (deceptus_i16)left - stream_x;
+    dy = (deceptus_i16)top - stream_y;
     stream_jobs = 0;
     if (stream_x < 0 || dx < -1 || dx > 1 || dy < -1 || dy > 1) {
         for (index = 0; index < GBA_CACHE_SLOTS; ++index) {
@@ -236,7 +240,7 @@ static void background_scroll(retro_u16 left, retro_u16 top)
             }
             for (column = left; column < left + 32; ++column) {
                 if (column >= clip->left && column < clip->left + clip->columns) {
-                    background_remove(column, row, 0);
+                    background_remove(column, row, clip->plane);
                 }
             }
         }
@@ -246,7 +250,7 @@ static void background_scroll(retro_u16 left, retro_u16 top)
             }
             for (column = left; column < left + 32; ++column) {
                 if (column >= clip->left && column < clip->left + clip->columns) {
-                    background_add(column, row, 0);
+                    background_add(column, row, clip->plane);
                 }
             }
         }
@@ -259,12 +263,12 @@ static void background_scroll(retro_u16 left, retro_u16 top)
 
 static void __attribute__((section(".iwram"))) background_prepare(void)
 {
-    retro_u16 index;
-    retro_u16 left, top;
+    deceptus_u16 index;
+    deceptus_u16 left, top;
 #if !GBA_LAYERED_BACKGROUND
-    retro_u16 column, row, pattern, slot, address, attributes;
-    retro_u8 plane;
-    const retro_u16 *cell;
+    deceptus_u16 column, row, pattern, slot, address, attributes;
+    deceptus_u8 plane;
+    const deceptus_u16 *cell;
 #endif
     left = frame.camera_x >> 3;
     top = frame.camera_y >> 3;
@@ -286,13 +290,13 @@ static void __attribute__((section(".iwram"))) background_prepare(void)
 #endif
 #if GBA_BACKGROUND_ANIMATION_CAPACITY
     {
-        retro_u16 ticks;
+        deceptus_u16 ticks;
         const gba_background_animation *clip;
-        ticks = (retro_u16)(engine.ticks - background_previous_tick);
+        ticks = (deceptus_u16)(engine.ticks - background_previous_tick);
         /* restart resets the engine clock, rather than advancing it by 65535 ticks. */
         if (ticks > 1) {
             for (index = 0; index < GBA_BACKGROUND_ANIMATION_COUNT; ++index) {
-                retro_animation_reset(&background_clocks[index]);
+                deceptus_animation_reset(&background_clocks[index]);
             }
             stream_x = -1;
             ticks = 0;
@@ -300,9 +304,10 @@ static void __attribute__((section(".iwram"))) background_prepare(void)
         background_previous_tick = engine.ticks;
         for (index = 0; index < GBA_BACKGROUND_ANIMATION_COUNT; ++index) {
             clip = &gba_background_animations[index];
-            if ((clip->durations
-                     ? retro_animation_advance_timed(&background_clocks[index], clip->frames, clip->durations, ticks, 1)
-                     : retro_animation_advance(&background_clocks[index], clip->frames, clip->frame_ticks, ticks, 1)) &&
+            if ((clip->durations ? deceptus_animation_advance_timed(&background_clocks[index], clip->frames,
+                                                                    clip->durations, ticks, 1)
+                                 : deceptus_animation_advance(&background_clocks[index], clip->frames,
+                                                              clip->frame_ticks, ticks, 1)) &&
                 left < clip->left + clip->columns && left + 32 > clip->left && top < clip->top + clip->rows &&
                 top + 22 > clip->top) {
 #if GBA_LAYERED_BACKGROUND
@@ -340,15 +345,16 @@ static void __attribute__((section(".iwram"))) background_prepare(void)
     index = 0;
     for (row = top; row < top + 22; ++row) {
         for (column = left; column < left + 32; ++column) {
-            cell = background_cell(column, row);
+            cell = background_cell(column, row, 0);
             stream_cells[index++] = cell;
             if (cell && pattern_slots[cell[0]]) {
                 used_slots[pattern_slots[cell[0]]] = 1;
             }
 #if GBA_LAYERED_BACKGROUND
-            cell = column < GBA_ROOM_COLUMNS && row < GBA_ROOM_ROWS
-                       ? (const retro_u16 *)gba_foreground_cells + ((retro_u32)row * GBA_ROOM_COLUMNS + column) * 2
-                       : 0;
+            cell =
+                column < GBA_ROOM_COLUMNS && row < GBA_ROOM_ROWS
+                    ? (const deceptus_u16 *)gba_foreground_cells + ((deceptus_u32)row * GBA_ROOM_COLUMNS + column) * 2
+                    : 0;
             foreground_cells[index - 1] = cell;
             if (cell && pattern_slots[cell[0]]) {
                 used_slots[pattern_slots[cell[0]]] = 1;
@@ -388,15 +394,15 @@ static void __attribute__((section(".iwram"))) background_prepare(void)
 
 static void background_commit(void)
 {
-    retro_u16 index, slot;
-    retro_u32 destination;
+    deceptus_u16 index, slot;
+    deceptus_u32 destination;
     if (!stream_changed) {
         return;
     }
     for (index = 0; index < stream_jobs; ++index) {
         slot = stream_slots[index];
         destination = slot < 1024 ? 0x06000000UL + slot * 32UL : 0x06008000UL + (slot - 1023) * 32UL;
-        dma_copy(gba_stream_patterns + (retro_u32)stream_patterns[index] * 32, (void *)destination, 32);
+        dma_copy(gba_stream_patterns + (deceptus_u32)stream_patterns[index] * 32, (void *)destination, 32);
     }
     dma_copy(stream_maps[0], (void *)0x0600e000, sizeof(stream_maps[0]));
     dma_copy(stream_maps[1], (void *)0x0600f000, sizeof(stream_maps[1]));

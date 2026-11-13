@@ -9,9 +9,10 @@ shared code under a very different compiler and resource budget.
 
 | Area | Responsibility |
 | --- | --- |
-| `include/retro/` | Shared types, input, world, entities, mechanisms, animation, campaign and adventure contracts |
+| `include/deceptus/` | Shared types, input, world, entities, mechanisms, animation, campaign and adventure contracts |
 | `src/engine/world.c` | Grid collision, dynamic blockers, one-way floors and body clearance |
-| `src/engine/entities.c`, `enemies.c` | Bounded entity/projectile services and native enemy behavior |
+| `src/engine/entities.c`, `enemies.c`, `enemies/` | Bounded entity/projectile services and native enemy behavior |
+| `src/engine/player/playerwater.c` | Source atmosphere water detection, swim motion and source-frame timing |
 | `src/engine/mechanisms/`, `logic.c` | Original-named mechanism modules, bounded state/queues and compiled actions |
 | `src/engine/adventure.c` | Inventory transactions, interaction conditions, dialogue/menu modes, portals and room state |
 | `src/game/deceptus.c`, `campaign.c` | Player/game rules and the curated preview campaign |
@@ -23,6 +24,8 @@ shared code under a very different compiler and resource budget.
 Console registers and SDK headers belong only in platform code. There is no
 runtime SFML, Lua interpreter, heap allocation or floating-point simulation.
 The GBA uses a small freestanding runtime rather than a host C library.
+Public C symbols use `deceptus_`, constants use `DECEPTUS_`, and headers live in
+`include/deceptus/`. Names of external emulator protocols retain their upstream API.
 
 ## Mechanism source correspondence
 
@@ -52,7 +55,7 @@ modules. Build this entry, not the individual implementation files as separate
 objects. This intentionally preserves static cross-family inlining, the existing
 GBA IWRAM placement and the SNES compiler's optimization scope. CMake lists the
 private modules as header-only sources for IDE navigation. The public API stays
-in `include/retro/mechanisms.h`; no virtual dispatch, heap objects or additional
+in `include/deceptus/mechanisms.h`; no virtual dispatch, heap objects or additional
 per-instance state are introduced by the source split.
 
 Use matching source basenames for future enemy ports, such as `blob_2.c` for
@@ -70,7 +73,7 @@ need explicit treatment.
 
 Callers own all state. Entity, projectile, mechanism, event and draw queues have
 fixed capacities. Content generation rejects unsupported features and resource
-limits instead of inventing successful behavior. `retro_engine.content_error`
+limits instead of inventing successful behavior. `deceptus_engine.content_error`
 exposes runtime resource failures for debugging.
 
 Crouching uses an 18px body instead of the standing 30px body and checks headroom
@@ -80,7 +83,7 @@ player frames supply the presentation.
 
 ## Adventure state
 
-`retro_adventure` wraps the campaign/engine and stores inventory counts,
+`deceptus_adventure` wraps the campaign/engine and stores inventory counts,
 progression flags, active dialogue/page, menu selection, portal cooldown and
 per-room mechanism snapshots. Current capacities are twelve rooms and sixteen
 inventory slots, including reserved item zero. Progression is in-memory only.
@@ -122,3 +125,24 @@ new platform's input, graphics/resource layout, audio and save adapters. Reuse
 the lossless source import, not another console's reduced palettes or tiles.
 Mega Drive currently has no backend; adding one is future work, not a build
 option that already succeeds.
+
+## Water and blob behavior
+
+Water cells are imported from the original atmosphere layer's physics tile ids,
+then stored as a separate bit in the existing collision grid. The player water
+module uses source horizontal/vertical speed limits and the 500ms stroke delay.
+Holding A raises the player after that delay. Gravity, acceleration and the
+surface-exit impulse are fixed-point approximations rather than Box2D-equivalent
+forces. Entry splashes, bubbles, full progression gating and complete original
+water behavior remain incomplete.
+
+Swim artwork uses the original full 72x48 frames for both directions rather
+than cropping or mirroring the other direction. The GBA packs these separately
+from the standing player's metasprites. Their colours remain exact RGB555 within
+a distinct OBJ palette reservation.
+
+`src/engine/enemies/blob_2.c` maps directly to `blob_2.lua`. Normal patrol uses the
+source idle/walk animation cycles, pulsed movement, contact damage and stomp
+lifecycle. Ground-patrol sprite transitions are compared against execution of
+the original Lua with identical position inputs. Jumping and ceiling-drop
+variants are reported as unsupported rather than being approximated as patrols.

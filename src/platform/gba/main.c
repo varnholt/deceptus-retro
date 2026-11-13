@@ -1,9 +1,9 @@
+#include "deceptus/enemies.h"
+#include "deceptus/engine.h"
 #include "gba_assets.h"
-#include "retro/enemies.h"
-#include "retro/engine.h"
 
-#define REG16(address) (*(volatile retro_u16 *)(address))
-#define REG32(address) (*(volatile retro_u32 *)(address))
+#define REG16(address) (*(volatile deceptus_u16 *)(address))
+#define REG32(address) (*(volatile deceptus_u32 *)(address))
 #define REG_DISPLAY REG16(0x04000000)
 #define REG_SCANLINE REG16(0x04000006)
 #define REG_KEYS REG16(0x04000130)
@@ -12,53 +12,53 @@
 #define REG_DMA_CONTROL REG32(0x040000dc)
 #define GBA_OBJECT_PRIORITY (GBA_LAYERED_BACKGROUND ? 2 : (GBA_CAMPAIGN ? 1 : 0))
 
-extern const retro_room deceptus_room;
+extern const deceptus_room deceptus_scene;
 
 typedef struct gba_object {
-    retro_u16 attribute0;
-    retro_u16 attribute1;
-    retro_u16 attribute2;
-    retro_u16 affine;
+    deceptus_u16 attribute0;
+    deceptus_u16 attribute1;
+    deceptus_u16 attribute2;
+    deceptus_u16 affine;
 } gba_object;
 
 #if GBA_CAMPAIGN
 #if GBA_TUTORIAL
-static retro_adventure adventure;
+static deceptus_adventure adventure;
 #define campaign adventure.campaign
 #define GBA_SCENERY_FLAGS adventure.flags
 #else
-static retro_campaign campaign;
+static deceptus_campaign campaign;
 #endif
 #define engine campaign.engine
 static const gba_stage *active_stage;
 #else
-static retro_engine engine;
+static deceptus_engine engine;
 #endif
 #ifndef GBA_SCENERY_FLAGS
 #define GBA_SCENERY_FLAGS 0
 #endif
-static retro_frame frame;
-static retro_video_caps video = {240, 160, RETRO_DRAW_CAPACITY};
+static deceptus_frame frame;
+static deceptus_video_caps video = {240, 160, DECEPTUS_DRAW_CAPACITY};
 static gba_object objects[128] __attribute__((aligned(4)));
-static retro_u16 uploaded_frame[3];
-static const retro_draw *actor_draws[3];
-static retro_u16 actor_count;
+static deceptus_u16 uploaded_frame[3];
+static const deceptus_draw *actor_draws[3];
+static deceptus_u16 actor_count;
 typedef struct gba_upload {
-    retro_u16 resource;
-    retro_u16 offset;
+    deceptus_u16 resource;
+    deceptus_u16 offset;
 } gba_upload;
 static gba_upload uploads[32];
-static retro_u16 upload_count, upload_bytes;
-volatile retro_u16 retro_debug[44];
+static deceptus_u16 upload_count, upload_bytes;
+volatile deceptus_u16 deceptus_debug[46];
 #if !GBA_STREAMED_BACKGROUND
-static retro_u16 map_chunk = 65535;
+static deceptus_u16 map_chunk = 65535;
 #endif
 
-static void dma_copy(const void *source, void *destination, retro_u32 bytes)
+static void dma_copy(const void *source, void *destination, deceptus_u32 bytes)
 {
     REG_DMA_CONTROL = 0;
-    REG_DMA_SOURCE = (retro_u32)source;
-    REG_DMA_DESTINATION = (retro_u32)destination;
+    REG_DMA_SOURCE = (deceptus_u32)source;
+    REG_DMA_DESTINATION = (deceptus_u32)destination;
     REG_DMA_CONTROL = (1UL << 31) | (1UL << 26) | (bytes >> 2);
     /* allow immediate DMA to start before a following transfer reconfigures it. */
     __asm__ volatile("nop\n nop\n nop\n nop" ::: "memory");
@@ -72,44 +72,44 @@ static void wait_vblank(void)
     }
 }
 
-static retro_u16 input_read(void)
+static deceptus_u16 input_read(void)
 {
-    retro_u16 keys, buttons;
-    keys = (retro_u16)~REG_KEYS;
+    deceptus_u16 keys, buttons;
+    keys = (deceptus_u16)~REG_KEYS;
     buttons = 0;
     if (keys & (1 << 5)) {
-        buttons |= RETRO_LEFT;
+        buttons |= DECEPTUS_LEFT;
     }
     if (keys & (1 << 4)) {
-        buttons |= RETRO_RIGHT;
+        buttons |= DECEPTUS_RIGHT;
     }
     if (keys & 3) {
-        buttons |= RETRO_JUMP;
+        buttons |= DECEPTUS_JUMP;
     }
     if (keys & 1) {
-        buttons |= RETRO_ACCEPT;
+        buttons |= DECEPTUS_ACCEPT;
     }
     if (keys & 2) {
-        buttons |= RETRO_BACK;
+        buttons |= DECEPTUS_BACK;
     }
     if (keys & (1 << 7)) {
-        buttons |= RETRO_DOWN;
+        buttons |= DECEPTUS_DOWN;
     }
     if (keys & (1 << 6)) {
-        buttons |= RETRO_UP;
+        buttons |= DECEPTUS_UP;
     }
     if (keys & (1 << 3)) {
-        buttons |= RETRO_PAUSE;
+        buttons |= DECEPTUS_PAUSE;
     }
     if (keys & (1 << 2)) {
-        buttons |= RETRO_RESTART;
+        buttons |= DECEPTUS_RESTART;
     }
     return buttons;
 }
 
 static void video_init(void)
 {
-    retro_u16 index;
+    deceptus_u16 index;
     REG_DISPLAY = 1 << 6;
     dma_copy(gba_background0, (void *)0x06000000, GBA_BACKGROUND0_BYTES);
     dma_copy(gba_background1, (void *)0x06008000, GBA_BACKGROUND1_BYTES);
@@ -147,11 +147,11 @@ static void video_init(void)
 #include "hud.h"
 #include "menu.h"
 
-static retro_u16 mechanism_resource(retro_u16 resource)
+static deceptus_u16 mechanism_resource(deceptus_u16 resource)
 {
-    retro_u16 index, colour;
+    deceptus_u16 index, colour;
     const gba_mechanism_resource *table, *entry, *other;
-    const retro_u16 *first, *second;
+    const deceptus_u16 *first, *second;
     table = (const gba_mechanism_resource *)gba_mechanism_table;
     if (resource >= GBA_MECHANISM_FRAME_COUNT) {
         engine.content_error = 1;
@@ -165,8 +165,8 @@ static retro_u16 mechanism_resource(retro_u16 resource)
         other = &table[uploads[index].resource];
         if (other->palette_first < entry->palette_first + entry->palette_count &&
             entry->palette_first < other->palette_first + other->palette_count) {
-            first = (const retro_u16 *)(gba_mechanism_palettes + entry->palette_offset);
-            second = (const retro_u16 *)(gba_mechanism_palettes + other->palette_offset);
+            first = (const deceptus_u16 *)(gba_mechanism_palettes + entry->palette_offset);
+            second = (const deceptus_u16 *)(gba_mechanism_palettes + other->palette_offset);
             for (colour = entry->palette_first; colour < entry->palette_first + entry->palette_count; ++colour) {
                 if (colour >= other->palette_first && colour < other->palette_first + other->palette_count &&
                     first[colour - entry->palette_first] != second[colour - other->palette_first]) {
@@ -188,12 +188,12 @@ static retro_u16 mechanism_resource(retro_u16 resource)
     return index;
 }
 
-static void mechanism_objects(retro_u16 *count)
+static void mechanism_objects(deceptus_u16 *count)
 {
-    retro_u16 index, segment, segments, resource, piece, tile, piece_x, piece_y;
-    retro_i16 x, y, origin_x, origin_y;
-    const retro_mechanism_def *definition;
-    const retro_mechanism_state *state;
+    deceptus_u16 index, segment, segments, resource, piece, tile, piece_x, piece_y;
+    deceptus_i16 x, y, origin_x, origin_y;
+    const deceptus_mechanism_def *definition;
+    const deceptus_mechanism_state *state;
     const gba_mechanism_resource *entry;
     gba_object *object;
     for (index = 0; index < engine.mechanisms.count; ++index) {
@@ -203,14 +203,14 @@ static void mechanism_objects(retro_u16 *count)
             continue;
         }
         segments = 1;
-        if (definition->kind == RETRO_MECH_LEVER) {
+        if (definition->kind == DECEPTUS_MECH_LEVER) {
             resource = GBA_LEVER_FIRST + (!state->handle_available ? 32 : state->frame);
-        } else if (definition->kind == RETRO_MECH_BLOCK && engine.mechanisms.timings &&
-                   (engine.mechanisms.timings[index].flags & RETRO_TIMED_ANIMATION)) {
+        } else if (definition->kind == DECEPTUS_MECH_BLOCK && engine.mechanisms.timings &&
+                   (engine.mechanisms.timings[index].flags & DECEPTUS_TIMED_ANIMATION)) {
             resource = GBA_BLOCK_FIRST + state->frame;
-        } else if (definition->kind == RETRO_MECH_SPIKES) {
+        } else if (definition->kind == DECEPTUS_MECH_SPIKES) {
             resource = GBA_SPIKES_FIRST + state->frame;
-        } else if (definition->kind == RETRO_MECH_COLLAPSING) {
+        } else if (definition->kind == DECEPTUS_MECH_COLLAPSING) {
             if (state->frame >= 38 || state->phase == 2) {
                 continue;
             }
@@ -222,15 +222,15 @@ static void mechanism_objects(retro_u16 *count)
         for (segment = 0; segment < segments; ++segment) {
             entry = &((const gba_mechanism_resource *)
                           gba_mechanism_table)[resource +
-                                               (definition->kind == RETRO_MECH_COLLAPSING ? (segment % 4) * 38 : 0)];
+                                               (definition->kind == DECEPTUS_MECH_COLLAPSING ? (segment % 4) * 38 : 0)];
             origin_x = definition->bounds.x - frame.camera_x + segment * 24;
             origin_y = definition->bounds.y - frame.camera_y;
-            if (definition->kind == RETRO_MECH_COLLAPSING) {
+            if (definition->kind == DECEPTUS_MECH_COLLAPSING) {
                 origin_y -= 24;
                 if (state->phase == 1) {
                     origin_y += state->timer / 10;
                 } else if (state->timer) {
-                    origin_y += (retro_i16)((state->timer / 2 + segment) & 3) - 1;
+                    origin_y += (deceptus_i16)((state->timer / 2 + segment) & 3) - 1;
                 }
             }
             tile = 65535;
@@ -248,34 +248,38 @@ static void mechanism_objects(retro_u16 *count)
                 }
                 if (tile == 65535) {
                     tile = mechanism_resource(resource +
-                                              (definition->kind == RETRO_MECH_COLLAPSING ? (segment % 4) * 38 : 0));
+                                              (definition->kind == DECEPTUS_MECH_COLLAPSING ? (segment % 4) * 38 : 0));
                 }
                 if (tile == 65535 || *count >= 128) {
                     engine.content_error = engine.content_error ? engine.content_error : 4;
                     return;
                 }
                 object = &objects[(*count)++];
-                object->attribute0 = ((retro_u16)y & 255) | (1 << 13);
-                object->attribute1 = ((retro_u16)x & 511) | (1 << 14);
+                object->attribute0 = ((deceptus_u16)y & 255) | (1 << 13);
+                object->attribute1 = ((deceptus_u16)x & 511) | (1 << 14);
                 object->attribute2 = tile + piece * 8 + (GBA_OBJECT_PRIORITY << 10);
             }
         }
     }
 }
 
-static void enemy_objects(retro_u16 *count, const retro_draw *draw)
+static void enemy_objects(deceptus_u16 *count, const deceptus_draw *draw)
 {
-    retro_u16 resource, tile, row, column, piece;
-    retro_i16 x, y;
+    deceptus_u16 resource, tile, row, column, piece;
+    deceptus_i16 x, y;
     const gba_mechanism_resource *entry;
     gba_object *object;
-    if (draw->kind == RETRO_RAT) {
+    if (draw->kind == DECEPTUS_BLOB_2) {
+        resource = GBA_BLOB_FIRST + draw->frame;
+    } else if (draw->kind == DECEPTUS_PLAYER_SWIM) {
+        resource = GBA_SWIM_FIRST + draw->frame;
+    } else if (draw->kind == DECEPTUS_RAT) {
         resource = GBA_RAT_FIRST + draw->frame;
-    } else if (draw->kind == RETRO_ARROW_TRAP) {
+    } else if (draw->kind == DECEPTUS_ARROW_TRAP) {
         resource = GBA_TRAP_FIRST + draw->frame;
-    } else if (draw->kind == RETRO_ARROW_MUZZLE) {
+    } else if (draw->kind == DECEPTUS_ARROW_MUZZLE) {
         resource = GBA_MUZZLE_FIRST + draw->frame;
-    } else if (draw->kind == RETRO_ARROW) {
+    } else if (draw->kind == DECEPTUS_ARROW) {
         resource = GBA_ARROW_FIRST + draw->frame;
     } else {
         engine.content_error = 6;
@@ -289,7 +293,7 @@ static void enemy_objects(retro_u16 *count, const retro_draw *draw)
     piece = 0;
     for (row = 0; row < entry->rows; ++row) {
         for (column = 0; column < entry->columns; ++column, ++piece) {
-            x = draw->x + column * 16;
+            x = draw->x + (draw->flip_x ? entry->columns - 1 - column : column) * 16;
             y = draw->y + row * 16;
             if (x <= -16 || x >= 240 || y <= -16 || y >= 160) {
                 continue;
@@ -299,8 +303,8 @@ static void enemy_objects(retro_u16 *count, const retro_draw *draw)
                 return;
             }
             object = &objects[(*count)++];
-            object->attribute0 = ((retro_u16)y & 255) | (1 << 13);
-            object->attribute1 = ((retro_u16)x & 511) | (1 << 14);
+            object->attribute0 = ((deceptus_u16)y & 255) | (1 << 13);
+            object->attribute1 = ((deceptus_u16)x & 511) | (1 << 14) | (draw->flip_x ? 1 << 12 : 0);
             object->attribute2 = tile + piece * 8 + (GBA_OBJECT_PRIORITY << 10);
         }
     }
@@ -308,9 +312,9 @@ static void enemy_objects(retro_u16 *count, const retro_draw *draw)
 
 static void video_prepare(void)
 {
-    retro_u16 index, piece, count;
-    retro_i16 x, y;
-    const retro_draw *draw;
+    deceptus_u16 index, piece, count;
+    deceptus_i16 x, y;
+    const deceptus_draw *draw;
     gba_object *object;
     for (index = 0; index < 128; ++index) {
         objects[index].attribute0 = 1 << 9;
@@ -325,14 +329,14 @@ static void video_prepare(void)
         return;
     }
 #endif
-    if (campaign.mode == RETRO_CAMPAIGN_TITLE || campaign.mode == RETRO_CAMPAIGN_FINISHED ||
-        campaign.mode == RETRO_CAMPAIGN_READY) {
+    if (campaign.mode == DECEPTUS_CAMPAIGN_TITLE || campaign.mode == DECEPTUS_CAMPAIGN_FINISHED ||
+        campaign.mode == DECEPTUS_CAMPAIGN_READY) {
         return;
     }
 #endif
     for (index = 0; index < frame.count; ++index) {
         draw = &frame.draws[index];
-        if (draw->kind >= RETRO_RAT) {
+        if (draw->kind >= DECEPTUS_RAT) {
             enemy_objects(&count, draw);
             continue;
         }
@@ -352,8 +356,8 @@ static void video_prepare(void)
                 continue;
             }
             object = &objects[count++];
-            object->attribute0 = ((retro_u16)y & 255) | (1 << 13);
-            object->attribute1 = ((retro_u16)x & 511) | (1 << 14) | (draw->flip_x ? 1 << 12 : 0);
+            object->attribute0 = ((deceptus_u16)y & 255) | (1 << 13);
+            object->attribute1 = ((deceptus_u16)x & 511) | (1 << 14) | (draw->flip_x ? 1 << 12 : 0);
             object->attribute2 = actor_count * 48 + piece * 8 + (GBA_OBJECT_PRIORITY << 10);
         }
         ++actor_count;
@@ -366,7 +370,7 @@ static void maps_commit(void)
 #if GBA_STREAMED_BACKGROUND
     background_commit();
 #else
-    retro_u16 chunk, next, chunks;
+    deceptus_u16 chunk, next, chunks;
     chunk = frame.camera_x >> 8;
     if (chunk == map_chunk) {
         return;
@@ -387,8 +391,8 @@ static void maps_commit(void)
 
 static void video_commit(void)
 {
-    retro_u16 index, resource;
-    const retro_draw *draw;
+    deceptus_u16 index, resource;
+    const deceptus_draw *draw;
     for (index = 0; index < actor_count; ++index) {
         draw = actor_draws[index];
         if (draw->frame >= GBA_ACTOR_FRAME_COUNT || draw->palette > 1) {
@@ -419,8 +423,8 @@ static void video_commit(void)
     REG16(0x04000014) = frame.camera_x & 511;
     REG16(0x04000016) = frame.camera_y;
 #if GBA_CAMPAIGN
-    REG16(0x04000050) = (engine.paused || campaign.mode != RETRO_CAMPAIGN_PLAYING) ? (3 << 6) | 0x13 : 0;
-    REG16(0x04000054) = (engine.paused || campaign.mode != RETRO_CAMPAIGN_PLAYING) ? 8 : 0;
+    REG16(0x04000050) = (engine.paused || campaign.mode != DECEPTUS_CAMPAIGN_PLAYING) ? (3 << 6) | 0x13 : 0;
+    REG16(0x04000054) = (engine.paused || campaign.mode != DECEPTUS_CAMPAIGN_PLAYING) ? 8 : 0;
 #else
     REG16(0x04000050) = engine.paused ? (3 << 6) | 0x13 : 0;
     REG16(0x04000054) = engine.paused ? 8 : 0;
@@ -436,76 +440,78 @@ static void video_commit(void)
 static void debug_write(void)
 {
 #if GBA_TUTORIAL
-    retro_debug[36] = adventure.flags;
-    retro_debug[37] = adventure.inventory.counts[1];
-    retro_debug[38] = adventure.inventory.counts[2];
-    retro_debug[39] = adventure.page;
-    retro_debug[40] = hud_ui_selected;
-    retro_debug[41] = stream_jobs;
-    retro_debug[42] = engine.room->player_gravity;
-    retro_debug[43] = engine.room->player_speed;
+    deceptus_debug[36] = adventure.flags;
+    deceptus_debug[37] = adventure.inventory.counts[1];
+    deceptus_debug[38] = adventure.inventory.counts[2];
+    deceptus_debug[39] = adventure.page;
+    deceptus_debug[40] = hud_ui_selected;
+    deceptus_debug[41] = stream_jobs;
+    deceptus_debug[42] = engine.room->player_gravity;
+    deceptus_debug[43] = engine.room->player_speed;
 #endif
 #if GBA_BACKGROUND_ANIMATION_CAPACITY
-    retro_debug[34] = background_clocks[0].frame;
-    retro_debug[35] = background_clocks[0].elapsed;
+    deceptus_debug[44] = GBA_BACKGROUND_ANIMATION_COUNT > 1 ? background_clocks[1].frame : 65535;
+    deceptus_debug[45] = GBA_BACKGROUND_ANIMATION_COUNT > 1 ? background_clocks[1].elapsed : 65535;
+    deceptus_debug[34] = background_clocks[0].frame;
+    deceptus_debug[35] = background_clocks[0].elapsed;
 #endif
-    retro_debug[0] = 0xd3ce;
-    retro_debug[1] = retro_floor(engine.entities[0].x);
-    retro_debug[2] = retro_floor(engine.entities[0].y);
-    retro_debug[3] = engine.camera_x;
-    retro_debug[4] = engine.ticks;
-    retro_debug[5] = engine.paused;
-    retro_debug[6] = engine.health;
-    retro_debug[7] = engine.entities[0].grounded;
-    retro_debug[8] = engine.door_entries;
-    retro_debug[9] = engine.event_count;
-    retro_debug[10] = frame.count;
-    retro_debug[11] = engine.entities[1].active;
-    retro_debug[12] = engine.checkpoint_id;
-    retro_debug[13] = engine.checkpoint_x;
-    retro_debug[14] = engine.checkpoint_y;
-    retro_debug[15] = engine.content_error;
-    retro_debug[16] = engine.camera_y;
-    retro_debug[17] = REG_SCANLINE;
-    retro_debug[18] = engine.mechanisms.count;
+    deceptus_debug[0] = 0xd3ce;
+    deceptus_debug[1] = deceptus_floor(engine.entities[0].x);
+    deceptus_debug[2] = deceptus_floor(engine.entities[0].y);
+    deceptus_debug[3] = engine.camera_x;
+    deceptus_debug[4] = engine.ticks;
+    deceptus_debug[5] = engine.paused;
+    deceptus_debug[6] = engine.health;
+    deceptus_debug[7] = engine.entities[0].grounded;
+    deceptus_debug[8] = engine.door_entries;
+    deceptus_debug[9] = engine.event_count;
+    deceptus_debug[10] = frame.count;
+    deceptus_debug[11] = engine.entities[1].active;
+    deceptus_debug[12] = engine.checkpoint_id;
+    deceptus_debug[13] = engine.checkpoint_x;
+    deceptus_debug[14] = engine.checkpoint_y;
+    deceptus_debug[15] = engine.content_error;
+    deceptus_debug[16] = engine.camera_y;
+    deceptus_debug[17] = REG_SCANLINE;
+    deceptus_debug[18] = engine.mechanisms.count;
     {
-        retro_u16 index, mask;
+        deceptus_u16 index, mask;
         mask = 0;
-        retro_debug[23] = 65535;
-        retro_debug[24] = 65535;
-        retro_debug[25] = 65535;
-        retro_debug[26] = 65535;
-        retro_debug[27] = 65535;
-        retro_debug[19] = 65535;
+        deceptus_debug[23] = 65535;
+        deceptus_debug[24] = 65535;
+        deceptus_debug[25] = 65535;
+        deceptus_debug[26] = 65535;
+        deceptus_debug[27] = 65535;
+        deceptus_debug[19] = 65535;
         for (index = 0; index < engine.mechanisms.count; ++index) {
-            if (engine.mechanisms.definitions[index].kind == RETRO_MECH_LEVER) {
-                retro_debug[19] = engine.mechanisms.states[index].enabled;
-                retro_debug[23] = engine.mechanisms.states[index].frame;
+            if (engine.mechanisms.definitions[index].kind == DECEPTUS_MECH_LEVER) {
+                deceptus_debug[19] = engine.mechanisms.states[index].enabled;
+                deceptus_debug[23] = engine.mechanisms.states[index].frame;
             }
-            if (engine.mechanisms.definitions[index].kind == RETRO_MECH_SPIKES) {
-                retro_debug[24] = engine.mechanisms.states[index].frame;
+            if (engine.mechanisms.definitions[index].kind == DECEPTUS_MECH_SPIKES) {
+                deceptus_debug[24] = engine.mechanisms.states[index].frame;
             }
-            if (engine.mechanisms.definitions[index].kind == RETRO_MECH_COLLAPSING && retro_debug[25] == 65535) {
-                retro_debug[25] = engine.mechanisms.states[index].phase;
-                retro_debug[26] = engine.mechanisms.states[index].active;
-                retro_debug[27] = engine.mechanisms.states[index].timer;
+            if (engine.mechanisms.definitions[index].kind == DECEPTUS_MECH_COLLAPSING && deceptus_debug[25] == 65535) {
+                deceptus_debug[25] = engine.mechanisms.states[index].phase;
+                deceptus_debug[26] = engine.mechanisms.states[index].active;
+                deceptus_debug[27] = engine.mechanisms.states[index].timer;
             }
             if (index < 16 && engine.mechanisms.states[index].enabled) {
-                mask |= (retro_u16)(1U << index);
+                mask |= (deceptus_u16)(1U << index);
             }
         }
-        retro_debug[20] = mask;
-        retro_debug[21] = engine.mechanisms.overflow;
-        retro_debug[22] = engine.hurt_ticks;
+        deceptus_debug[20] = mask;
+        deceptus_debug[21] = engine.mechanisms.overflow;
+        deceptus_debug[22] = engine.hurt_ticks;
     }
-    retro_debug[30] = engine.deaths;
-    retro_debug[32] = engine.projectiles_fired;
+    deceptus_debug[30] = engine.deaths;
+    deceptus_debug[32] = engine.projectiles_fired;
 #if GBA_CAMPAIGN
-    retro_debug[28] = campaign.room_index;
-    retro_debug[29] = campaign.mode;
-    retro_debug[30] = campaign.deaths;
-    retro_debug[31] = campaign.seconds;
-    retro_debug[33] = campaign.restarts;
+    deceptus_debug[28] = campaign.room_index;
+    deceptus_debug[29] = campaign.mode;
+    deceptus_debug[30] = campaign.deaths;
+    deceptus_debug[31] = campaign.seconds;
+    deceptus_debug[33] = campaign.restarts;
 #endif
 }
 
@@ -513,13 +519,13 @@ int __attribute__((section(".iwram"))) main(void)
 {
 #if GBA_CAMPAIGN
 #if GBA_TUTORIAL
-    retro_adventure_init(&adventure, &gba_tutorial_definition, &video);
+    deceptus_adventure_init(&adventure, &gba_tutorial_definition, &video);
 #else
-    retro_campaign_init(&campaign, &gba_campaign_definition, &video);
+    deceptus_campaign_init(&campaign, &gba_campaign_definition, &video);
 #endif
     active_stage = &gba_stages[0];
 #else
-    retro_init(&engine, &deceptus_room, &video);
+    deceptus_init(&engine, &deceptus_scene, &video);
 #endif
     video_init();
 #if GBA_TUTORIAL
@@ -529,9 +535,9 @@ int __attribute__((section(".iwram"))) main(void)
     while (1) {
 #if GBA_CAMPAIGN
 #if GBA_TUTORIAL
-        if (retro_adventure_tick(&adventure, input_read())) {
+        if (deceptus_adventure_tick(&adventure, input_read())) {
 #else
-        if (retro_campaign_tick(&campaign, input_read())) {
+        if (deceptus_campaign_tick(&campaign, input_read())) {
 #endif
             active_stage = &gba_stages[campaign.room_index];
             video_init();
@@ -541,9 +547,9 @@ int __attribute__((section(".iwram"))) main(void)
             background_reset();
         }
 #else
-        retro_tick(&engine, input_read());
+        deceptus_tick(&engine, input_read());
 #endif
-        retro_render(&engine, &frame);
+        deceptus_render(&engine, &frame);
 #if GBA_TUTORIAL
         menu_prepare();
         if (!menu_active) {

@@ -1,6 +1,7 @@
-#include "retro/enemies.h"
-#include "retro/engine.h"
-#include "retro/physics.h"
+#include "deceptus/enemies.h"
+#include "deceptus/engine.h"
+#include "deceptus/physics.h"
+#include "deceptus/playerwater.h"
 #include <string.h>
 
 #define PLAYER_HALF_WIDTH 8
@@ -12,9 +13,9 @@
 #define ACCELERATION 4
 #define FRICTION 6
 
-void retro_event_push(retro_engine *engine, retro_u8 kind)
+void deceptus_event_push(deceptus_engine *engine, deceptus_u8 kind)
 {
-    if (engine->event_count == RETRO_EVENT_CAPACITY) {
+    if (engine->event_count == DECEPTUS_EVENT_CAPACITY) {
         engine->event_overflow = 1;
         return;
     }
@@ -23,12 +24,12 @@ void retro_event_push(retro_engine *engine, retro_u8 kind)
     ++engine->event_count;
 }
 
-static void respawn(retro_engine *engine)
+static void respawn(deceptus_engine *engine)
 {
-    retro_entity *player;
+    deceptus_entity *player;
     player = &engine->entities[0];
-    player->x = RETRO_FIXED(engine->checkpoint_x);
-    player->y = RETRO_FIXED(engine->checkpoint_y);
+    player->x = DECEPTUS_FIXED(engine->checkpoint_x);
+    player->y = DECEPTUS_FIXED(engine->checkpoint_y);
     player->velocity_x = 0;
     player->velocity_y = 0;
     player->grounded = 0;
@@ -39,13 +40,13 @@ static void respawn(retro_engine *engine)
     player->drop_ticks = 0;
 }
 
-static void update_camera(retro_engine *engine)
+static void update_camera(deceptus_engine *engine)
 {
-    retro_i16 maximum_camera, target;
-    const retro_entity *player;
+    deceptus_i16 maximum_camera, target;
+    const deceptus_entity *player;
     player = &engine->entities[0];
-    target = retro_floor(player->x) - engine->video.width / 2;
-    maximum_camera = engine->room->columns * RETRO_CELL_SIZE - engine->video.width;
+    target = deceptus_floor(player->x) - engine->video.width / 2;
+    maximum_camera = engine->room->columns * DECEPTUS_CELL_SIZE - engine->video.width;
     if (maximum_camera < 0) {
         maximum_camera = 0;
     }
@@ -56,8 +57,8 @@ static void update_camera(retro_engine *engine)
         target = maximum_camera;
     }
     engine->camera_x = target;
-    target = retro_floor(player->y) - (retro_i16)(engine->video.height * 3 / 4);
-    maximum_camera = engine->room->rows * RETRO_CELL_SIZE - engine->video.height;
+    target = deceptus_floor(player->y) - (deceptus_i16)(engine->video.height * 3 / 4);
+    maximum_camera = engine->room->rows * DECEPTUS_CELL_SIZE - engine->video.height;
     if (maximum_camera < 0) {
         maximum_camera = 0;
     }
@@ -70,9 +71,9 @@ static void update_camera(retro_engine *engine)
     engine->camera_y = target;
 }
 
-void retro_init(retro_engine *engine, const retro_room *room, const retro_video_caps *video)
+void deceptus_init(deceptus_engine *engine, const deceptus_room *room, const deceptus_video_caps *video)
 {
-    retro_video_caps saved_video;
+    deceptus_video_caps saved_video;
     saved_video = *video;
     memset(engine, 0, sizeof(*engine));
     engine->room = room;
@@ -80,21 +81,21 @@ void retro_init(retro_engine *engine, const retro_room *room, const retro_video_
     engine->health = room->max_health ? room->max_health : 3;
     engine->checkpoint_x = room->spawn_x;
     engine->checkpoint_y = room->spawn_y;
-    engine->content_error = !retro_mechanisms_init(&engine->mechanisms, room->mechanisms, room->mechanism_count,
-                                                   room->mechanism_targets, room->mechanism_target_count);
-    retro_mechanisms_configure(&engine->mechanisms, room->mechanism_timings);
-    retro_spawn(engine, RETRO_PLAYER, room->spawn_x, room->spawn_y);
+    engine->content_error = !deceptus_mechanisms_init(&engine->mechanisms, room->mechanisms, room->mechanism_count,
+                                                      room->mechanism_targets, room->mechanism_target_count);
+    deceptus_mechanisms_configure(&engine->mechanisms, room->mechanism_timings);
+    deceptus_spawn(engine, DECEPTUS_PLAYER, room->spawn_x, room->spawn_y);
     if (room->patrol_x >= 0) {
-        retro_spawn(engine, RETRO_PATROL, room->patrol_x, room->patrol_y);
+        deceptus_spawn(engine, DECEPTUS_PATROL, room->patrol_x, room->patrol_y);
     }
     if (room->door_x >= 0) {
-        retro_spawn(engine, RETRO_DOOR, room->door_x, room->door_y);
+        deceptus_spawn(engine, DECEPTUS_DOOR, room->door_x, room->door_y);
     }
-    retro_enemies_init(engine);
+    deceptus_enemies_init(engine);
     update_camera(engine);
 }
 
-static retro_fixed approach(retro_fixed value, retro_fixed target, retro_i16 amount)
+static deceptus_fixed approach(deceptus_fixed value, deceptus_fixed target, deceptus_i16 amount)
 {
     if (value < target) {
         value += amount;
@@ -107,20 +108,23 @@ static retro_fixed approach(retro_fixed value, retro_fixed target, retro_i16 amo
     return value;
 }
 
-static void update_player(retro_engine *engine, const retro_input *input)
+static void update_player(deceptus_engine *engine, const deceptus_input *input)
 {
-    static const retro_u8 bend_frames[18] = {0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 5, 6, 6, 6};
-    retro_entity *player;
-    retro_fixed target, speed;
-    retro_i16 direction, wall;
-    retro_u16 gravity;
-    retro_u8 height, was_grounded;
+    static const deceptus_u8 bend_frames[18] = {0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 5, 6, 6, 6};
+    deceptus_entity *player;
+    deceptus_fixed target, speed;
+    deceptus_i16 direction, wall;
+    deceptus_u16 gravity;
+    deceptus_u8 height, was_grounded;
     player = &engine->entities[0];
+    if (deceptus_player_water_tick(engine, input)) {
+        return;
+    }
     was_grounded = player->grounded;
-    if ((input->held & RETRO_DOWN) && player->grounded) {
+    if ((input->held & DECEPTUS_DOWN) && player->grounded) {
         player->crouched = 1;
-    } else if (player->crouched && retro_body_clear(engine->room, &engine->mechanisms, player->x, player->y,
-                                                    PLAYER_HALF_WIDTH, PLAYER_HEIGHT)) {
+    } else if (player->crouched && deceptus_body_clear(engine->room, &engine->mechanisms, player->x, player->y,
+                                                       PLAYER_HALF_WIDTH, PLAYER_HEIGHT)) {
         player->crouched = 0;
     }
     if (player->crouched) {
@@ -131,17 +135,17 @@ static void update_player(retro_engine *engine, const retro_input *input)
         --player->bend_ticks;
     }
     wall = 0;
-    if (engine->room->skills & RETRO_SKILL_WALL_JUMP) {
-        wall = retro_wall_side(engine->room, player, &engine->mechanisms);
+    if (engine->room->skills & DECEPTUS_SKILL_WALL_JUMP) {
+        wall = deceptus_wall_side(engine->room, player, &engine->mechanisms);
     }
     direction = 0;
-    if (input->held & RETRO_LEFT) {
+    if (input->held & DECEPTUS_LEFT) {
         --direction;
     }
-    if (input->held & RETRO_RIGHT) {
+    if (input->held & DECEPTUS_RIGHT) {
         ++direction;
     }
-    if (player->crouched && !(engine->room->skills & RETRO_SKILL_CRAWL) && !(input->pressed & RETRO_JUMP)) {
+    if (player->crouched && !(engine->room->skills & DECEPTUS_SKILL_CRAWL) && !(input->pressed & DECEPTUS_JUMP)) {
         direction = 0;
         player->velocity_x = 0;
     }
@@ -162,16 +166,17 @@ static void update_player(retro_engine *engine, const retro_input *input)
     if (player->drop_ticks) {
         --player->drop_ticks;
     }
-    if ((input->pressed & RETRO_JUMP) && (input->held & RETRO_DOWN) && player->grounded &&
-        (retro_cell(engine->room, retro_position_cell(player->x), retro_position_cell(player->y)) & RETRO_ONE_WAY)) {
+    if ((input->pressed & DECEPTUS_JUMP) && (input->held & DECEPTUS_DOWN) && player->grounded &&
+        (deceptus_cell(engine->room, deceptus_position_cell(player->x), deceptus_position_cell(player->y)) &
+         DECEPTUS_ONE_WAY)) {
         player->drop_ticks = 20;
         player->grounded = 0;
         player->coyote_ticks = 0;
         player->jump_buffer_ticks = 0;
-        player->velocity_y = RETRO_ONE;
+        player->velocity_y = DECEPTUS_ONE;
         player->crouched = 0;
         player->bend_ticks = 0;
-    } else if ((input->pressed & RETRO_JUMP) && !player->crouched) {
+    } else if ((input->pressed & DECEPTUS_JUMP) && !player->crouched) {
         player->jump_buffer_ticks = 6;
     }
     if (player->jump_buffer_ticks && player->coyote_ticks) {
@@ -179,21 +184,21 @@ static void update_player(retro_engine *engine, const retro_input *input)
         player->jump_buffer_ticks = 0;
         player->coyote_ticks = 0;
         player->grounded = 0;
-        retro_event_push(engine, RETRO_EVENT_JUMP);
+        deceptus_event_push(engine, DECEPTUS_EVENT_JUMP);
     }
     if (player->jump_buffer_ticks && !player->grounded && !player->coyote_ticks && wall) {
         player->velocity_y = -JUMP_SPEED;
         player->velocity_x = -wall * speed;
         player->jump_buffer_ticks = 0;
-        retro_event_push(engine, RETRO_EVENT_JUMP);
+        deceptus_event_push(engine, DECEPTUS_EVENT_JUMP);
     }
     /* a released jump cuts ascent; buffered landings still get an initial jump. */
-    if ((input->released & RETRO_JUMP) && player->velocity_y < -28) {
+    if ((input->released & DECEPTUS_JUMP) && player->velocity_y < -28) {
         player->velocity_y = -28;
     }
     if (engine->room->player_gravity) {
-        gravity = player->gravity_fraction + (retro_u16)engine->room->player_gravity_fraction;
-        player->gravity_fraction = (retro_u8)gravity;
+        gravity = player->gravity_fraction + (deceptus_u16)engine->room->player_gravity_fraction;
+        player->gravity_fraction = (deceptus_u8)gravity;
         player->velocity_y +=
             (player->velocity_y >= 0 && engine->room->player_fall_gravity ? engine->room->player_fall_gravity
                                                                           : engine->room->player_gravity) +
@@ -207,15 +212,15 @@ static void update_player(retro_engine *engine, const retro_input *input)
     if (player->velocity_y > MAX_FALL) {
         player->velocity_y = MAX_FALL;
     }
-    height = RETRO_PLAYER_HEIGHT(player);
-    retro_move_horizontal_dynamic(engine->room, player, PLAYER_HALF_WIDTH, height, &engine->mechanisms);
-    retro_move_vertical_dynamic(engine->room, player, PLAYER_HALF_WIDTH, height, &engine->mechanisms);
+    height = DECEPTUS_PLAYER_HEIGHT(player);
+    deceptus_move_horizontal_dynamic(engine->room, player, PLAYER_HALF_WIDTH, height, &engine->mechanisms);
+    deceptus_move_vertical_dynamic(engine->room, player, PLAYER_HALF_WIDTH, height, &engine->mechanisms);
     if (player->grounded && !was_grounded) {
-        retro_event_push(engine, RETRO_EVENT_LAND);
+        deceptus_event_push(engine, DECEPTUS_EVENT_LAND);
     }
     ++player->animation_ticks;
     if (player->grounded && player->velocity_x && !(player->animation_ticks & 15)) {
-        retro_event_push(engine, RETRO_EVENT_STEP);
+        deceptus_event_push(engine, DECEPTUS_EVENT_STEP);
     }
     if (!player->grounded) {
         player->frame = player->velocity_y < 0 ? 16 : 17;
@@ -228,13 +233,13 @@ static void update_player(retro_engine *engine, const retro_input *input)
     }
 }
 
-static void hurt(retro_engine *engine, retro_u16 damage)
+static void hurt(deceptus_engine *engine, deceptus_u16 damage)
 {
     if (engine->hurt_ticks || !damage) {
         return;
     }
     engine->hurt_ticks = 60;
-    engine->health = damage >= engine->health ? 0 : (retro_u8)(engine->health - damage);
+    engine->health = damage >= engine->health ? 0 : (deceptus_u8)(engine->health - damage);
     if (!engine->health) {
         ++engine->deaths;
         engine->health = engine->room->max_health ? engine->room->max_health : 3;
@@ -242,25 +247,25 @@ static void hurt(retro_engine *engine, retro_u16 damage)
     } else if (!engine->room->max_health) {
         respawn(engine);
     }
-    retro_event_push(engine, RETRO_EVENT_HURT);
+    deceptus_event_push(engine, DECEPTUS_EVENT_HURT);
 }
 
-static void update_actors(retro_engine *engine, const retro_input *input)
+static void update_actors(deceptus_engine *engine, const deceptus_input *input)
 {
-    retro_u16 index;
-    retro_entity *player, *entity;
-    retro_i16 distance_x, distance_y, ahead, below;
+    deceptus_u16 index;
+    deceptus_entity *player, *entity;
+    deceptus_i16 distance_x, distance_y, ahead, below;
     player = &engine->entities[0];
-    for (index = 1; index < RETRO_ENTITY_CAPACITY; ++index) {
+    for (index = 1; index < DECEPTUS_ENTITY_CAPACITY; ++index) {
         entity = &engine->entities[index];
         if (!entity->active) {
             continue;
         }
-        if (entity->kind == RETRO_PATROL) {
+        if (entity->kind == DECEPTUS_PATROL) {
             entity->velocity_x = entity->facing_left ? -9 : 9;
-            ahead = retro_position_cell(entity->x + RETRO_FIXED(entity->facing_left ? -12 : 12));
-            below = retro_position_cell(entity->y + RETRO_ONE);
-            if (!(retro_cell(engine->room, ahead, below) & (RETRO_SOLID | RETRO_ONE_WAY))) {
+            ahead = deceptus_position_cell(entity->x + DECEPTUS_FIXED(entity->facing_left ? -12 : 12));
+            below = deceptus_position_cell(entity->y + DECEPTUS_ONE);
+            if (!(deceptus_cell(engine->room, ahead, below) & (DECEPTUS_SOLID | DECEPTUS_ONE_WAY))) {
                 entity->facing_left = !entity->facing_left;
                 entity->velocity_x = -entity->velocity_x;
             }
@@ -268,52 +273,53 @@ static void update_actors(retro_engine *engine, const retro_input *input)
             if (entity->velocity_y > MAX_FALL) {
                 entity->velocity_y = MAX_FALL;
             }
-            retro_move_horizontal_dynamic(engine->room, entity, PLAYER_HALF_WIDTH, PLAYER_HEIGHT, &engine->mechanisms);
+            deceptus_move_horizontal_dynamic(engine->room, entity, PLAYER_HALF_WIDTH, PLAYER_HEIGHT,
+                                             &engine->mechanisms);
             if (!entity->velocity_x) {
                 entity->facing_left = !entity->facing_left;
             }
-            retro_move_vertical_dynamic(engine->room, entity, PLAYER_HALF_WIDTH, PLAYER_HEIGHT, &engine->mechanisms);
+            deceptus_move_vertical_dynamic(engine->room, entity, PLAYER_HALF_WIDTH, PLAYER_HEIGHT, &engine->mechanisms);
             entity->frame = 8 + (engine->ticks / 6) % 8;
         }
-        distance_x = retro_floor(player->x - entity->x);
-        distance_y = retro_floor(player->y - entity->y);
+        distance_x = deceptus_floor(player->x - entity->x);
+        distance_y = deceptus_floor(player->y - entity->y);
         if (distance_x > -18 && distance_x < 18 && distance_y > -24 && distance_y < 24) {
-            if (entity->kind == RETRO_PATROL) {
+            if (entity->kind == DECEPTUS_PATROL) {
                 if (player->velocity_y > 0 && distance_y < -12) {
                     entity->active = 0;
                     player->velocity_y = -50;
-                    retro_event_push(engine, RETRO_EVENT_JUMP);
+                    deceptus_event_push(engine, DECEPTUS_EVENT_JUMP);
                 } else {
                     hurt(engine, 1);
                 }
-            } else if (entity->kind == RETRO_DOOR && (input->pressed & RETRO_UP)) {
+            } else if (entity->kind == DECEPTUS_DOOR && (input->pressed & DECEPTUS_UP)) {
                 ++engine->door_entries;
                 respawn(engine);
-                retro_event_push(engine, RETRO_EVENT_DOOR);
+                deceptus_event_push(engine, DECEPTUS_EVENT_DOOR);
             }
         }
     }
 }
 
-void retro_place_player(retro_engine *engine, retro_i16 x, retro_i16 y)
+void deceptus_place_player(deceptus_engine *engine, deceptus_i16 x, deceptus_i16 y)
 {
-    engine->entities[0].x = RETRO_FIXED(x);
-    engine->entities[0].y = RETRO_FIXED(y);
+    engine->entities[0].x = DECEPTUS_FIXED(x);
+    engine->entities[0].y = DECEPTUS_FIXED(y);
     engine->entities[0].velocity_x = 0;
     engine->entities[0].velocity_y = 0;
     engine->entities[0].grounded = 0;
     update_camera(engine);
 }
 
-void retro_tick(retro_engine *engine, retro_u16 buttons)
+void deceptus_tick(deceptus_engine *engine, deceptus_u16 buttons)
 {
-    retro_input input;
-    retro_u16 mechanism_index;
-    retro_i16 mechanism_slot;
-    retro_entity *player;
-    retro_rect player_rect;
-    const retro_mechanism_event *mechanism_event;
-    const retro_mechanism_def *mechanism;
+    deceptus_input input;
+    deceptus_u16 mechanism_index;
+    deceptus_i16 mechanism_slot;
+    deceptus_entity *player;
+    deceptus_rect player_rect;
+    const deceptus_mechanism_event *mechanism_event;
+    const deceptus_mechanism_def *mechanism;
     if (engine->content_error) {
         return;
     }
@@ -323,13 +329,13 @@ void retro_tick(retro_engine *engine, retro_u16 buttons)
     engine->previous_buttons = buttons;
     engine->event_count = 0;
     engine->event_overflow = 0;
-    if (input.pressed & RETRO_RESTART) {
-        retro_init(engine, engine->room, &engine->video);
+    if (input.pressed & DECEPTUS_RESTART) {
+        deceptus_init(engine, engine->room, &engine->video);
         /* init clears state, so preserve held buttons to avoid repeat edges. */
         engine->previous_buttons = buttons;
         return;
     }
-    if (input.pressed & RETRO_PAUSE) {
+    if (input.pressed & DECEPTUS_PAUSE) {
         engine->paused = !engine->paused;
     }
     if (engine->paused) {
@@ -341,29 +347,30 @@ void retro_tick(retro_engine *engine, retro_u16 buttons)
     }
     update_player(engine, &input);
     player = &engine->entities[0];
-    player_rect.x = retro_floor(player->x) - PLAYER_HALF_WIDTH;
-    player_rect.y = retro_floor(player->y) - RETRO_PLAYER_HEIGHT(player);
+    player_rect.x = deceptus_floor(player->x) - PLAYER_HALF_WIDTH;
+    player_rect.y = deceptus_floor(player->y) - DECEPTUS_PLAYER_HEIGHT(player);
     player_rect.width = PLAYER_HALF_WIDTH * 2;
-    player_rect.height = RETRO_PLAYER_HEIGHT(player);
-    retro_mechanisms_tick(&engine->mechanisms, &player_rect, (input.pressed & RETRO_UP) != 0);
+    player_rect.height = DECEPTUS_PLAYER_HEIGHT(player);
+    deceptus_mechanisms_tick(&engine->mechanisms, &player_rect, (input.pressed & DECEPTUS_UP) != 0);
     for (mechanism_index = 0; mechanism_index < engine->mechanisms.event_count; ++mechanism_index) {
         mechanism_event = &engine->mechanisms.events[mechanism_index];
-        if (mechanism_event->kind == RETRO_MECH_REACHED) {
-            mechanism_slot = retro_mechanism_find(&engine->mechanisms, mechanism_event->source_id);
+        if (mechanism_event->kind == DECEPTUS_MECH_REACHED) {
+            mechanism_slot = deceptus_mechanism_find(&engine->mechanisms, mechanism_event->source_id);
             mechanism = &engine->mechanisms.definitions[mechanism_slot];
             engine->checkpoint_x = mechanism->bounds.x + mechanism->bounds.width / 2;
             engine->checkpoint_y = mechanism->bounds.y + mechanism->bounds.height;
             engine->checkpoint_id = mechanism->source_id;
-            retro_event_push(engine, RETRO_EVENT_CHECKPOINT);
-        } else if (mechanism_event->kind == RETRO_MECH_HIT) {
+            deceptus_event_push(engine, DECEPTUS_EVENT_CHECKPOINT);
+        } else if (mechanism_event->kind == DECEPTUS_MECH_HIT) {
             hurt(engine, mechanism_event->value);
         }
     }
-    hurt(engine, retro_enemies_tick(engine));
+    hurt(engine, deceptus_enemies_tick(engine));
     update_actors(engine, &input);
     player = &engine->entities[0];
-    if (retro_floor(player->y) > engine->room->rows * RETRO_CELL_SIZE + PLAYER_HEIGHT ||
-        (retro_cell(engine->room, retro_position_cell(player->x), retro_position_cell(player->y - 1)) & RETRO_HAZARD)) {
+    if (deceptus_floor(player->y) > engine->room->rows * DECEPTUS_CELL_SIZE + PLAYER_HEIGHT ||
+        (deceptus_cell(engine->room, deceptus_position_cell(player->x), deceptus_position_cell(player->y - 1)) &
+         DECEPTUS_HAZARD)) {
         /* falling must recover even during the contact invulnerability interval. */
         engine->hurt_ticks = 0;
         hurt(engine, engine->room->max_health ? engine->health : 1);
@@ -371,36 +378,42 @@ void retro_tick(retro_engine *engine, retro_u16 buttons)
     update_camera(engine);
 }
 
-void retro_render(const retro_engine *engine, retro_frame *frame)
+void deceptus_render(const deceptus_engine *engine, deceptus_frame *frame)
 {
-    retro_u16 index;
-    retro_i16 screen_x, screen_y;
-    const retro_entity *entity;
-    retro_draw *draw;
+    deceptus_u16 index;
+    deceptus_i16 screen_x, screen_y;
+    const deceptus_entity *entity;
+    deceptus_draw *draw;
     frame->count = 0;
     frame->camera_x = engine->camera_x;
     frame->camera_y = engine->camera_y;
-    for (index = 0; index < RETRO_ENTITY_CAPACITY; ++index) {
+    for (index = 0; index < DECEPTUS_ENTITY_CAPACITY; ++index) {
         entity = &engine->entities[index];
-        if (entity->kind >= RETRO_RAT || !entity->active ||
+        if (entity->kind >= DECEPTUS_RAT || !entity->active ||
             (index == 0 && engine->hurt_ticks && ((engine->hurt_ticks / 4) & 1))) {
             continue;
         }
-        screen_x = retro_floor(entity->x) - engine->camera_x - 16;
-        screen_y = retro_floor(entity->y) - engine->camera_y - 48;
+        screen_x = deceptus_floor(entity->x) - engine->camera_x - 16;
+        screen_y = deceptus_floor(entity->y) - engine->camera_y - 48;
         if (screen_x <= -32 || screen_x >= engine->video.width || screen_y <= -48 || screen_y >= engine->video.height) {
             continue;
         }
-        if (frame->count >= RETRO_DRAW_CAPACITY || frame->count >= engine->video.max_draws) {
+        if (frame->count >= DECEPTUS_DRAW_CAPACITY || frame->count >= engine->video.max_draws) {
             break;
         }
         draw = &frame->draws[frame->count++];
         draw->x = screen_x;
         draw->y = screen_y;
-        draw->frame = entity->kind == RETRO_DOOR ? 18 : entity->frame;
-        draw->palette = entity->kind == RETRO_PATROL ? 1 : 0;
+        draw->frame = entity->kind == DECEPTUS_DOOR ? 18 : entity->frame;
+        draw->palette = entity->kind == DECEPTUS_PATROL ? 1 : 0;
         draw->flip_x = entity->facing_left;
         draw->kind = entity->kind;
+        if (index == 0 && entity->in_water) {
+            draw->kind = DECEPTUS_PLAYER_SWIM;
+            draw->x -= 20;
+            draw->frame += entity->facing_left ? 13 : 0;
+            draw->flip_x = 0;
+        }
     }
-    retro_enemies_render(engine, frame);
+    deceptus_enemies_render(engine, frame);
 }

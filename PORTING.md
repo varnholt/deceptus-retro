@@ -30,8 +30,8 @@ copies of the game. Unused script files are not mistaken for placed enemies.
 | Tiled placements/properties | Build-time object catalog and compact C definitions | Full catalog; supported objects in the prototype crop are imported |
 | C++ mechanisms | Reusable C components with source ids and event queues | Checkpoints, sensors, levers, blocks, damage, timed spikes and collapsing platforms; four linked GBA preview areas playable |
 | Lua mechanism callbacks | Parse source, resolve selectors, compile bounded action programs | Two original callbacks verified; complete scripts unsupported |
-| Lua enemies | Native C state machines plus shared movement/animation/weapon services | Rat and arrow trap implemented; 14 placed script types remain to port |
-| Box2D | Fixed-point character/world collision and specific analytical mechanisms | Grid collision, dynamic rectangles and preview wall jumping; slopes/joints/water incomplete |
+| Lua enemies | Native C state machines plus shared movement/animation/weapon services | Rat, arrow trap and normal ground blob implemented; blob variants and 13 placed script types remain |
+| Box2D | Fixed-point character/world collision and specific analytical mechanisms | Grid collision, dynamic rectangles and preview wall jumping; slopes/joints and full water fidelity incomplete |
 | Level/cutscene logic | Persistent flags, dialogue, inventory, authored room arrivals and selected interactions | Opening subset implemented; full progression and cutscenes incomplete |
 | Graphics | Lossless import followed by target-specific palette/tile packing | GBA and SNES prototypes; original artwork remains 1:1 |
 | Platform services | Audio, controller mapping, save storage and ROM resource loading | GBA/SNES controls and video; host preview; audio and persistent saves incomplete |
